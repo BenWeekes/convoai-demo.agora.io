@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conversational AI Demos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: #0a0e1a;
+    color: #e2e8f0;
+    min-height: 100vh;
+  }
+
+  .header {
+    text-align: center;
+    padding: 3.5rem 1.5rem 1rem;
+  }
+
+  .header svg {
+    height: 32px;
+    margin-bottom: 1.25rem;
+  }
+
+  .header h1 {
+    font-size: 2rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 0.5rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .header h1 svg {
+    display: inline-block;
+    vertical-align: middle;
+    margin-bottom: 0;
+  }
+
+  .header p {
+    font-size: 1.05rem;
+    color: #8892a8;
+    max-width: 520px;
+    margin: 0 auto;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1.25rem;
+    max-width: 1120px;
+    margin: 2.5rem auto;
+    padding: 0 1.5rem 3rem;
+  }
+
+  .card {
+    background: #141927;
+    border-radius: 14px;
+    padding: 1.75rem;
+    display: flex;
+    flex-direction: column;
+    border: 1px solid #1e2740;
+    transition: transform 0.15s ease, border-color 0.2s ease;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+  }
+
+  .card:hover {
+    transform: translateY(-3px);
+    border-color: #2a3558;
+  }
+
+  .card-blue::before   { background: linear-gradient(90deg, #099dfd, #47b5ff); }
+  .card-purple::before { background: linear-gradient(90deg, #8b5cf6, #a78bfa); }
+  .card-green::before  { background: linear-gradient(90deg, #10b981, #34d399); }
+  .card-amber::before  { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+  .card-rose::before   { background: linear-gradient(90deg, #f43f5e, #fb7185); }
+
+  .card-screenshot {
+    width: 100%;
+    height: 140px;
+    border-radius: 8px;
+    margin-bottom: 1rem;
+    object-fit: cover;
+    object-position: top;
+    background: #1e2740;
+  }
+
+  .card-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.35rem;
+    margin-bottom: 1rem;
+  }
+
+  .card-blue .card-icon   { background: rgba(9,157,253,0.12); }
+  .card-purple .card-icon { background: rgba(139,92,246,0.12); }
+  .card-green .card-icon  { background: rgba(16,185,129,0.12); }
+  .card-amber .card-icon  { background: rgba(245,158,11,0.12); }
+  .card-rose .card-icon   { background: rgba(244,63,94,0.12); }
+
+  .card h2 {
+    font-size: 1.15rem;
+    font-weight: 600;
+    color: #fff;
+    margin-bottom: 0.5rem;
+  }
+
+  .card .desc {
+    font-size: 0.875rem;
+    color: #8892a8;
+    line-height: 1.55;
+    flex: 1;
+    margin-bottom: 1.25rem;
+  }
+
+  .card-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.6rem 1.25rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background 0.15s ease, transform 0.1s ease;
+  }
+
+  .btn:active { transform: scale(0.97); }
+
+  .btn-blue   { background: #099dfd; color: #fff; }
+  .btn-blue:hover   { background: #0b8de0; }
+  .btn-purple { background: #8b5cf6; color: #fff; }
+  .btn-purple:hover { background: #7c4fe0; }
+  .btn-green  { background: #10b981; color: #fff; }
+  .btn-green:hover  { background: #0ea572; }
+  .btn-amber  { background: #f59e0b; color: #1a1a1a; }
+  .btn-amber:hover  { background: #e09000; }
+  .btn-rose   { background: #f43f5e; color: #fff; }
+  .btn-rose:hover   { background: #dc3550; }
+
+  .btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .github-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    background: rgba(255,255,255,0.06);
+    color: #8892a8;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .github-link:hover {
+    background: rgba(255,255,255,0.12);
+    color: #e2e8f0;
+  }
+
+  .github-link svg {
+    width: 18px;
+    height: 18px;
+  }
+
+  .footer {
+    text-align: center;
+    padding: 1rem 1.5rem 2.5rem;
+    color: #4a5568;
+    font-size: 0.8rem;
+  }
+
+  .footer a {
+    color: #6b7a96;
+    text-decoration: none;
+  }
+
+  .footer a:hover { color: #8892a8; }
+
+  @media (max-width: 700px) {
+    .header h1 { font-size: 1.5rem; }
+    .grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>
+    <svg width="32" height="32" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8.715 13.81a4.81 4.81 0 1 1 0-9.62 4.81 4.81 0 0 1 0 9.62Zm5.602-11.818-.074.098-.073.097-.097-.073-.093-.073a8.722 8.722 0 1 0-5.265 15.68 8.63 8.63 0 0 0 5.265-1.772l.093-.068.097-.078.073.102.074.098a4.16 4.16 0 0 0 2.798 1.68l.322.044V.273l-.322.044a4.165 4.165 0 0 0-2.798 1.675Z" fill="#00C2FF"></path></svg>
+    Conversational AI Demos
+  </h1>
+</div>
+
+<div class="grid">
+
+  <div class="card card-blue">
+    <img src="/assets/client-voice-screenshot.png" alt="Voice AI Agent screenshot" class="card-screenshot">
+    <h2>Voice AI Agent</h2>
+    <p class="desc">Real-time voice conversation with an AI agent. Features live transcription, audio visualization, and configurable LLM/TTS settings.</p>
+    <div class="card-actions">
+      <a href="/react-voice-client" class="btn btn-blue">
+        Try it now
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"/></svg>
+      </a>
+      <a href="https://github.com/AgoraIO-Conversational-AI/agent-samples/tree/main/react-voice-client" target="_blank" rel="noopener" class="github-link" title="View source on GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      </a>
+    </div>
+  </div>
+
+  <div class="card card-purple">
+    <img src="/assets/client-avatar-screenshot.png" alt="Video AI Agent screenshot" class="card-screenshot">
+    <h2>Video AI Agent with Avatar</h2>
+    <p class="desc">AI agent with a video avatar (HeyGen). See the agent on screen while having a real-time voice conversation with live transcription.</p>
+    <div class="card-actions">
+      <a href="/react-video-client-avatar" class="btn btn-purple">
+        Try it now
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"/></svg>
+      </a>
+      <a href="https://github.com/AgoraIO-Conversational-AI/agent-samples/tree/main/react-video-client-avatar" target="_blank" rel="noopener" class="github-link" title="View source on GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      </a>
+    </div>
+  </div>
+
+  <div class="card card-green">
+    <div class="card-icon">&#128736;</div>
+    <h2>Palabra App Builder</h2>
+    <p class="desc">Build and configure Agora conversational AI applications with a visual interface. Create custom agent experiences with Palabra.</p>
+    <div class="card-actions">
+      <a href="/create" class="btn btn-green">
+        Try it now
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"/></svg>
+      </a>
+      <a href="https://github.com/BenWeekes/palabra" target="_blank" rel="noopener" class="github-link" title="View source on GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      </a>
+    </div>
+  </div>
+
+  <div class="card card-amber">
+    <div class="card-icon">&#9889;</div>
+    <h2>Simple Voice Client<br>No Backend</h2>
+    <p class="desc">Lightweight standalone HTML client for testing. Enter your Agora credentials directly &mdash; no backend required.</p>
+    <div class="card-actions">
+      <a href="/simple-voice-client-no-backend/" class="btn btn-amber">
+        Try it now
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"/></svg>
+      </a>
+      <a href="https://github.com/AgoraIO-Conversational-AI/agent-samples/tree/main/simple-voice-client-no-backend" target="_blank" rel="noopener" class="github-link" title="View source on GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      </a>
+    </div>
+  </div>
+
+  <div class="card card-rose">
+    <div class="card-icon">&#128640;</div>
+    <h2>Simple Voice Client<br>With Backend</h2>
+    <p class="desc">Full-featured HTML client with backend integration. Automatically provisions channels and manages agent lifecycle.</p>
+    <div class="card-actions">
+      <a href="/simple-voice-client-with-backend/" class="btn btn-rose">
+        Try it now
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M6.22 3.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L9.94 8 6.22 4.28a.75.75 0 0 1 0-1.06Z"/></svg>
+      </a>
+      <a href="https://github.com/AgoraIO-Conversational-AI/agent-samples/tree/main/simple-voice-client-with-backend" target="_blank" rel="noopener" class="github-link" title="View source on GitHub">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      </a>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  <a href="https://github.com/AgoraIO-Conversational-AI/agent-samples">GitHub</a>
+  &nbsp;&middot;&nbsp;
+  <a href="https://docs.agora.io/en/conversational-ai/overview">Documentation</a>
+  &nbsp;&middot;&nbsp;
+  Powered by Agora Conversational AI
+</div>
+
+</body>
+</html>
