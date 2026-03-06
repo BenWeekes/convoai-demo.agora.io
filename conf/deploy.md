@@ -282,26 +282,95 @@ All keys live in `/home/ubuntu/agent-samples/simple-backend/.env`. The backend r
 
 ## Build & Deploy Cheatsheet
 
-### Rebuild a client
+### CRITICAL: Rebuild procedure for Next.js clients
+
+**You MUST stop the PM2 process before rebuilding.** Rebuilding `.next` while the
+server is running causes "Failed to find Server Action" client-side errors because
+the running Next.js server holds stale action IDs that no longer match the new build.
+
+**Correct order: stop → clean → install → build → start**
+
+#### Rebuild react-voice-client
 ```bash
+pm2 stop react-voice-client
 cd /home/ubuntu/agent-samples/react-voice-client
-rm -rf node_modules package-lock.json
+rm -rf node_modules package-lock.json .next
 npm install --legacy-peer-deps
 NEXT_PUBLIC_BASE_PATH=/react-voice-client NEXT_PUBLIC_BACKEND_URL=/simple-backend npm run build
+pm2 start react-voice-client
 ```
 
-For Thymia builds, add `NEXT_PUBLIC_ENABLE_THYMIA=true` and `NEXT_PUBLIC_DEFAULT_PROFILE` to the build env:
+#### Rebuild react-video-client-avatar
 ```bash
-cd /home/ubuntu/agent-samples/react-voice-client-thymia
+pm2 stop react-video-client-avatar
+cd /home/ubuntu/agent-samples/react-video-client-avatar
+rm -rf node_modules package-lock.json .next
+npm install --legacy-peer-deps
+NEXT_PUBLIC_BASE_PATH=/react-video-client-avatar NEXT_PUBLIC_BACKEND_URL=/simple-backend npm run build
+pm2 start react-video-client-avatar
+```
+
+#### Rebuild Thymia variants
+
+Thymia directories are full copies of the originals rebuilt with Thymia env vars.
+Always stop PM2 first, recreate from original, build, then start.
+
+```bash
+# Voice Thymia
+pm2 stop react-voice-client-thymia
+cd /home/ubuntu/agent-samples
+rm -rf react-voice-client-thymia
+cp -r react-voice-client react-voice-client-thymia
+cd react-voice-client-thymia
+NEXT_PUBLIC_BASE_PATH=/react-voice-client-thymia NEXT_PUBLIC_BACKEND_URL=/simple-backend NEXT_PUBLIC_ENABLE_THYMIA=true NEXT_PUBLIC_DEFAULT_PROFILE=THYMIA npm run build
+pm2 start react-voice-client-thymia
+
+# Video Avatar Thymia
+pm2 stop react-video-client-avatar-thymia
+cd /home/ubuntu/agent-samples
+rm -rf react-video-client-avatar-thymia
+cp -r react-video-client-avatar react-video-client-avatar-thymia
+cd react-video-client-avatar-thymia
+NEXT_PUBLIC_BASE_PATH=/react-video-client-avatar-thymia NEXT_PUBLIC_BACKEND_URL=/simple-backend NEXT_PUBLIC_ENABLE_THYMIA=true NEXT_PUBLIC_DEFAULT_PROFILE=THYMIA_VIDEO npm run build
+pm2 start react-video-client-avatar-thymia
+```
+
+#### Full rebuild all clients (after git pull with code changes)
+```bash
+pm2 stop react-voice-client react-video-client-avatar react-voice-client-thymia react-video-client-avatar-thymia
+
+# Voice client
+cd /home/ubuntu/agent-samples/react-voice-client
+rm -rf node_modules package-lock.json .next
+npm install --legacy-peer-deps
+NEXT_PUBLIC_BASE_PATH=/react-voice-client NEXT_PUBLIC_BACKEND_URL=/simple-backend npm run build
+
+# Video client
+cd /home/ubuntu/agent-samples/react-video-client-avatar
+rm -rf node_modules package-lock.json .next
+npm install --legacy-peer-deps
+NEXT_PUBLIC_BASE_PATH=/react-video-client-avatar NEXT_PUBLIC_BACKEND_URL=/simple-backend npm run build
+
+# Thymia variants (copy from freshly built originals)
+cd /home/ubuntu/agent-samples
+rm -rf react-voice-client-thymia && cp -r react-voice-client react-voice-client-thymia
+cd react-voice-client-thymia
 NEXT_PUBLIC_BASE_PATH=/react-voice-client-thymia NEXT_PUBLIC_BACKEND_URL=/simple-backend NEXT_PUBLIC_ENABLE_THYMIA=true NEXT_PUBLIC_DEFAULT_PROFILE=THYMIA npm run build
 
-cd /home/ubuntu/agent-samples/react-video-client-avatar-thymia
+cd /home/ubuntu/agent-samples
+rm -rf react-video-client-avatar-thymia && cp -r react-video-client-avatar react-video-client-avatar-thymia
+cd react-video-client-avatar-thymia
 NEXT_PUBLIC_BASE_PATH=/react-video-client-avatar-thymia NEXT_PUBLIC_BACKEND_URL=/simple-backend NEXT_PUBLIC_ENABLE_THYMIA=true NEXT_PUBLIC_DEFAULT_PROFILE=THYMIA_VIDEO npm run build
+
+pm2 start react-voice-client react-video-client-avatar react-voice-client-thymia react-video-client-avatar-thymia
+pm2 save
 ```
 
-Note: `NEXT_PUBLIC_*` vars are baked in at build time by Next.js. The Thymia directories are
-full copies of the originals — to update code, edit the original, then `rm -rf <thymia-dir> &&
-cp -r <original> <thymia-dir>` and rebuild with the Thymia env vars.
+**Notes:**
+- `NEXT_PUBLIC_*` vars are baked in at build time by Next.js — they have NO effect at runtime.
+- `rm -rf .next` is essential — stale cache causes "Failed to find Server Action" errors.
+- `rm -rf node_modules package-lock.json` is only needed when pulling new toolkit/ui-kit versions.
+- Always `pm2 save` after changing process config to persist across reboots.
 
 ### Restart services
 ```bash
