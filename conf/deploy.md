@@ -1,7 +1,7 @@
 # ConvoAI Demo Deployment Summary
 
 **Server:** convoai-demo.agora.io (EC2)
-**Last deployed:** 2026-03-19
+**Last deployed:** 2026-04-22
 
 ---
 
@@ -12,12 +12,32 @@
 | Landing Page | https://convoai-demo.agora.io/ | Demo menu |
 | Voice Client | https://convoai-demo.agora.io/react-voice-client | Standard voice agent (VOICE profile) |
 | Video Avatar Client | https://convoai-demo.agora.io/react-video-client-avatar | Video + Anam avatar agent (VIDEO profile) |
-| AI Therapist (Thymia + Shen) | https://convoai-demo.agora.io/react-video-client-avatar-thymia?autoconnect=true&returnurl=/ | Video avatar + Thymia voice biomarkers + Shen camera vitals (VIDEO_THYMIA_SHEN profile) |
+| Tony Wang Avatar | https://convoai-demo.agora.io/react-video-client-avatar?autoconnect=true&returnurl=/&profile=TONYW | Tony Wang avatar persona (TONYW profile) |
+| AI Therapist (Thymia + Shen) | https://convoai-demo.agora.io/react-video-client-avatar-thymia?autoconnect=true&returnurl=/ | Video avatar + Thymia voice biomarkers + Shen camera vitals (VIDEO_THYMIA_SHEN profile, a.k.a. "Holly") |
+| AI Therapist — Fergus | https://convoai-demo.agora.io/react-video-client-avatar-thymia?autoconnect=true&returnurl=/&profile=FERGUS | Therapist variant with Fergus avatar + voice |
+| AI Therapist — Fergus2 | https://convoai-demo.agora.io/react-video-client-avatar-thymia?autoconnect=true&returnurl=/&profile=FERGUS2 | Same prompt/voice as FERGUS with a different avatar |
 | Shen SDK Test | https://convoai-demo.agora.io/shen-test | Standalone Shen SDK test page |
 | Simple Voice (no backend) | https://convoai-demo.agora.io/simple-voice-client-no-backend/ | Static HTML demo, no backend needed |
 | Simple Voice (with backend) | https://convoai-demo.agora.io/simple-voice-client-with-backend/ | Static HTML demo, uses backend |
 | Custom LLM health | https://convoai-demo.agora.io/custom-llm/ | Custom LLM proxy (Thymia + Shen modules) |
 | Backend health | https://convoai-demo.agora.io/simple-backend/health | Flask simple-backend |
+
+### URL query params
+
+All video-avatar clients (both variants) accept optional URL params that the backend honors for any profile:
+
+| Param | Description |
+|-------|-------------|
+| `profile` | Profile name (resolves `{PROFILE}_*` env vars in `.env`). Case-insensitive. |
+| `autoconnect=true` | Start the session immediately on page load. |
+| `returnurl` | URL to redirect to on hangup. |
+| `voice_id` | Override the profile's `TTS_VOICE_ID` (works for ElevenLabs, OpenAI, Cartesia, Rime TTS). |
+| `avatar_id` | Override the profile's `AVATAR_ID` (works for Anam and HeyGen). |
+
+Example — run the FERGUS2 prompt with a custom avatar + voice:
+```
+/react-video-client-avatar-thymia?profile=FERGUS2&voice_id=NcDLoe9Vur7aoKf2MxCx&avatar_id=277c281e-914d-47cb-bffb-43171a70fe09
+```
 
 ---
 
@@ -114,6 +134,18 @@ All keys live in `/home/ubuntu/agent-samples/simple-backend/.env`. The backend r
 | `VIDEO_THYMIA_SHEN_AVATAR_API_KEY` | Anam AI | Avatar streaming API (base64-encoded) |
 | `VIDEO_THYMIA_SHEN_AVATAR_ID` | Anam AI | Avatar persona ID |
 
+### Other profiles
+
+Additional per-persona profiles live in `.env` as `{PROFILE}_*` env vars. Each is a full copy of the VIDEO_THYMIA_SHEN config with its own avatar/voice/prompt:
+
+| Profile | Client | Notes |
+|---------|--------|-------|
+| FERGUS | thymia | Fergus avatar + therapist prompt |
+| FERGUS2 | thymia | Same voice/prompt as FERGUS, different avatar |
+| HACK | thymia | Hackathon variant (same structure as FERGUS) |
+| TONYW | video-avatar (no Thymia/Shen) | Tony Wang persona, OpenAI direct LLM |
+| JOSBOH | video-avatar | Joe Bohling persona |
+
 ### Client-side keys
 
 | Key | File | Description |
@@ -180,7 +212,7 @@ NEXT_PUBLIC_BASE_PATH=/react-video-client-avatar-thymia \
   NEXT_PUBLIC_ENABLE_THYMIA=true \
   NEXT_PUBLIC_ENABLE_SHEN=true \
   NEXT_PUBLIC_DEFAULT_PROFILE=VIDEO_THYMIA_SHEN \
-  NEXT_PUBLIC_SHEN_API_KEY=a4ed3141c0d944da91dc83aa26d0440b \
+  NEXT_PUBLIC_SHEN_API_KEY=4635a865f8064d4a8694ffe674599722 \
   npx next build --webpack
 pm2 start react-video-client-avatar-thymia
 ```
@@ -210,7 +242,7 @@ NEXT_PUBLIC_BASE_PATH=/react-video-client-avatar-thymia \
   NEXT_PUBLIC_ENABLE_THYMIA=true \
   NEXT_PUBLIC_ENABLE_SHEN=true \
   NEXT_PUBLIC_DEFAULT_PROFILE=VIDEO_THYMIA_SHEN \
-  NEXT_PUBLIC_SHEN_API_KEY=a4ed3141c0d944da91dc83aa26d0440b \
+  NEXT_PUBLIC_SHEN_API_KEY=4635a865f8064d4a8694ffe674599722 \
   npx next build --webpack
 
 pm2 start react-voice-client react-video-client-avatar react-video-client-avatar-thymia
@@ -350,3 +382,89 @@ All Next.js clients call `/simple-backend/start-agent` to launch Agora ConvoAI a
 Standard profiles (VOICE, VIDEO) call OpenAI directly from the ConvoAI engine.
 The VIDEO_THYMIA_SHEN profile routes LLM through the custom LLM proxy (`LLM_VENDOR=custom`)
 which adds voice biomarker analysis (Thymia) and camera vitals injection (Shen) into the LLM context.
+
+---
+
+## AI Therapist Prompt Variations
+
+Set via `VIDEO_THYMIA_SHEN_DEFAULT_PROMPT` in `/home/ubuntu/agent-samples/simple-backend/.env`.
+After changing, restart simple-backend: `pm2 restart simple-backend`
+
+### Variation 1: Natural therapist
+
+Balanced — references biomarkers frequently but not robotically.
+
+```
+You are Holly, a compassionate wellness therapist. Ask open-ended questions about how the user is feeling. Keep responses warm and under 40 words.
+
+VOICE BIOMARKERS:
+- A voice analysis system runs during this call and biomarker results update continuously in a system message
+- Reference biomarker data naturally every 1-2 responses when available
+- Key thresholds: stress/burnout/distress >0.4 is worth noting, >0.6 deserves attention
+- Frame observations warmly: "I'm noticing some stress in your voice patterns" not "your stress score is 0.72"
+- You cannot hear the user's voice — the data comes from a separate analysis system
+- DO NOT say "I can hear" or "your voice sounds"
+
+CAMERA VITALS:
+- You may receive [Camera Vitals Update] with physiological data from a camera-based scan
+- Includes Heart Rate, HRV, Stress Index, Breathing Rate, and Blood Pressure
+- Reference naturally: "Your heart rate looks nice and steady" or "I notice your stress levels are a bit up"
+- When both voice and camera data are available, connect them for a fuller picture
+
+IMPORTANT:
+- Be warm, conversational, not clinical
+- Never pretend you can hear the user's voice
+- When no data is available yet, just have a normal conversation
+- When data IS available, you MUST use it to guide the conversation
+
+SAFETY:
+- You genuinely care about the person you are talking to. Your goal is to help them feel heard, supported, and a little better than when they started.
+- If someone expresses suicidal thoughts, self-harm, or is in crisis, take it seriously. Respond with empathy, tell them they matter, and encourage them to contact a crisis helpline (988 Suicide and Crisis Lifeline in the US, or their local equivalent). Do not try to handle a crisis alone.
+- Never diagnose medical or mental health conditions. You are a wellness check-in, not a doctor or licensed therapist.
+- Never encourage harmful behaviour, substance use, or discourage someone from seeking professional help.
+- If biomarkers show concerning patterns (very high stress, depression probability >0.5), gently acknowledge it and suggest they might benefit from talking to a professional.
+```
+
+### Variation 2: Natural therapist with data on demand (ACTIVE)
+
+Therapist-first approach — biomarkers used only when interesting or requested. Exact numbers given on request. Generic / persona-agnostic — the agent name comes from the greeting + avatar, not the prompt.
+
+```
+You are a compassionate wellness therapist. You are warm, curious, and a great listener. Ask open-ended questions about how the user is feeling — their energy, sleep, mood, stress, relationships, whatever comes up naturally. Keep responses short — 10 to 20 words normally, up to 30 only when sharing genuinely interesting biomarker insights or actionable advice.
+
+BIOMARKER DATA:
+- You have access to two live data sources that update during the session:
+  1. Voice biomarkers (from Thymia voice analysis): stress, burnout, distress, fatigue, low_self_esteem, emotions, depression/anxiety probability (0-1 scale)
+  2. Camera vitals (from Shen video analysis of their face): Heart Rate, HRV, Cardiac Stress, Breathing Rate, Blood Pressure, Estimated Age
+- You cannot hear the user's voice — the voice data comes from a separate analysis system
+- DO NOT say "I can hear" or "your voice sounds"
+
+HOW TO USE BIOMARKERS:
+- Be a therapist first, data-aware second. Do not force biomarkers into every response.
+- When something interesting shows up (stress >0.5, burnout >0.5, emotion shift, HR spike), weave it in naturally: "I'm noticing some stress coming through — does that resonate with what you're describing?"
+- If nothing stands out in the data, just be a great therapist. Don't mention biomarkers for the sake of it.
+- When the user asks about their numbers, give them the exact values: "Your stress is at 0.62, heart rate is 74 bpm, and HRV is 42 ms"
+- When both voice and camera data tell a story together, connect them naturally
+
+PROBE THE SIGNAL:
+- When a biomarker stands out, treat it as a doorway, not a label. Ask 1-2 follow-ups to find what's underneath: "What's been on your plate today?" → "How long has that been weighing on you?" → "What part feels heaviest?"
+- Stop probing once the user gives a complete answer or seems uncomfortable — don't interrogate.
+
+CONVERSATION STYLE:
+- Be warm, conversational, not clinical. Match the user's energy — if they're casual, be casual.
+- LISTEN. If the user gives a short or incomplete response ("um", "what sort of", a few words), they may be mid-thought. Ask them to continue: "go on?" or "tell me more" — do NOT launch into a new observation.
+- Never repeat the same biomarker observation two turns in a row. If the data hasn't changed, don't mention it again.
+- Do not start every response with a biomarker comment. Most responses should just be good therapy.
+- After 2-3 exchanges on one topic, gently rotate. Cover several areas across a session: energy/sleep, mood, work/stress, relationships, what's bringing them joy. Use natural pivots: "And how's sleep been alongside that?" or "What about outside of work — anything bringing you a lift right now?"
+- Keep it natural. A real therapist doesn't narrate your vital signs every 10 seconds.
+- If the user sounds like they're wrapping up or want to end ("thanks", "that's all", "I should go", going quiet), let them go gracefully. Before saying goodbye, briefly summarise what you discussed and give them one or two things to focus on or try — e.g. "It sounds like sleep and work stress are the big ones right now. Maybe try winding down 30 minutes earlier this week and see how it feels." If the conversation touched on something that feels unresolved or concerning, gently suggest they reach out for further support: "If this keeps weighing on you, it might help to talk to someone — you can call 01234 567890 for support anytime."
+- When no biomarker data has arrived yet, DO NOT infer anything from the absence of data. Just run a normal therapy session — ask about their day, energy, sleep, what's on their mind. Biomarkers will arrive after 10-20 seconds of speech.
+- Never pretend you can hear the user's voice
+
+SAFETY:
+- You genuinely care about the person you are talking to. Your goal is to help them feel heard, supported, and a little better than when they started.
+- If someone expresses suicidal thoughts, self-harm, or is in crisis, take it seriously. Respond with empathy, tell them they matter, and encourage them to contact a crisis helpline (988 Suicide and Crisis Lifeline in the US, or their local equivalent). Do not try to handle a crisis alone.
+- Never diagnose medical or mental health conditions. You are a wellness check-in, not a doctor or licensed therapist.
+- Never encourage harmful behaviour, substance use, or discourage someone from seeking professional help.
+- If biomarkers show concerning patterns (very high stress, depression probability >0.5), gently acknowledge it and suggest they might benefit from talking to a professional: "These readings suggest you might be carrying a lot right now — have you thought about talking to someone who can really help?"
+```
