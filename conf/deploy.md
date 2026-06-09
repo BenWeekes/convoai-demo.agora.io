@@ -13,7 +13,9 @@
 | Voice Client | https://convoai-demo.agora.io/react-voice-client | Standard voice agent (VOICE profile) |
 | Video Avatar Client | https://convoai-demo.agora.io/react-video-client-avatar | Video + Anam avatar agent (VIDEO profile) |
 | Tony Wang Avatar | https://convoai-demo.agora.io/react-video-client-avatar?autoconnect=true&returnurl=/&profile=TONYW | Tony Wang avatar persona (TONYW profile) |
-| AI Therapist (Thymia + Shen) | https://convoai-demo.agora.io/react-video-client-avatar-thymia?autoconnect=true&returnurl=/ | Video avatar + Thymia voice biomarkers + Shen camera vitals (VIDEO_THYMIA_SHEN profile, a.k.a. "Holly") |
+| AI Therapist (Thymia + Shen) | https://convoai-demo.agora.io/react-video-client-avatar-thymia?autoconnect=true&returnurl=/ | Video avatar + Thymia voice biomarkers + Shen camera vitals (VIDEO_THYMIA_SHEN profile, a.k.a. "Holly"). NOTE: Shen license expired — currently rebuilt with `NEXT_PUBLIC_ENABLE_SHEN=false`, Thymia only |
+| Photo Avatar (QR demo) | https://convoai-demo.agora.io/photo | Upload a photo from a phone → vision picks sex/age + voice → talk to a LemonSlice avatar of yourself (PHOTO profile). "Talk to Avatar" auto-redirects to `/photo-call` with `autoconnect=true&returnurl=/photo/result/<id>` |
+| Photo Call (photo demo avatar client) | https://convoai-demo.agora.io/photo-call | Fork of react-video-client-avatar that hides local video; avatar fills the viewport on mobile, chat takes a full-height left panel on desktop. Lives in /home/ubuntu/web/photo-call (NOT in agent-samples). |
 | AI Therapist — Fergus | https://convoai-demo.agora.io/react-video-client-avatar-thymia?autoconnect=true&returnurl=/&profile=FERGUS | Therapist variant with Fergus avatar + voice |
 | AI Therapist — Fergus2 | https://convoai-demo.agora.io/react-video-client-avatar-thymia?autoconnect=true&returnurl=/&profile=FERGUS2 | Same prompt/voice as FERGUS with a different avatar |
 | Shen SDK Test | https://convoai-demo.agora.io/shen-test | Standalone Shen SDK test page |
@@ -49,6 +51,8 @@ Example — run the FERGUS2 prompt with a custom avatar + voice:
 | react-voice-client | 8083 | `/home/ubuntu/agent-samples/react-voice-client` | Next.js, basePath=/react-voice-client |
 | react-video-client-avatar | 8084 | `/home/ubuntu/agent-samples/react-video-client-avatar` | Next.js, basePath=/react-video-client-avatar |
 | react-video-client-avatar-thymia | 8086 | `/home/ubuntu/agent-samples/react-video-client-avatar-thymia` | Next.js, basePath=/react-video-client-avatar-thymia, ENABLE_THYMIA + ENABLE_SHEN, profile VIDEO_THYMIA_SHEN |
+| react-photo-avatar | 8085 | `/home/ubuntu/web/react-photo-avatar` | Next.js, basePath=/photo, photo upload + Talk-to-Avatar landing (PHOTO profile). Lives in /home/ubuntu/web (NOT agent-samples) |
+| photo-call | 8088 | `/home/ubuntu/web/photo-call` | Next.js, basePath=/photo-call. Cloned + simplified `react-video-client-avatar`: no local video, avatar fills viewport on mobile, chat full-height on desktop. Lives in /home/ubuntu/web (NOT agent-samples) |
 | server-custom-llm | 8100 | `/home/ubuntu/server-custom-llm/node` | Custom LLM proxy with Thymia + Shen modules |
 
 **PM2 config:** `/home/ubuntu/agent-samples/ecosystem.config.js`
@@ -87,6 +91,54 @@ location ^~ /react-video-client-avatar-thymia {
 ```
 
 **Why `/shenai-sdk/` at root?** The Shen SDK uses Emscripten-compiled WASM with pthread workers. Workers load `shenai_sdk.mjs` via `import.meta.url` which resolves correctly within the basePath, but the workers' internal resource loading fails when served through the Next.js proxy. Serving the SDK files directly via nginx with correct MIME types and COOP/COEP headers solves this.
+
+### Photo upload demo locations
+
+```nginx
+# react-photo-avatar Next.js app (upload landing)
+location ^~ /photo {
+    proxy_pass http://localhost:8085;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+}
+
+# photo-call - cloned avatar client used by the photo demo
+location ^~ /photo-call {
+    proxy_pass http://localhost:8088;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+}
+
+# Uploaded photos — static, no-cache so latest.jpg always reloads
+location ^~ /photo-uploads/ {
+    alias /home/ubuntu/web/uploads/;
+    add_header Cache-Control "no-store, no-cache, must-revalidate" always;
+    types {
+        image/jpeg jpg jpeg;
+        image/png png;
+        image/webp webp;
+        application/json json;
+    }
+    autoindex off;
+}
+```
+
+Also bumped server-wide `client_max_body_size` from `10M` to `20M` to allow phone-camera JPEG uploads (backend caps at 15 MB).
+
+**Canonical mirror** of the live `/etc/nginx/sites-enabled/palabra` is kept at `/home/ubuntu/web/conf/palabra.conf` for easy diff/grep; date-stamped backups are in the same directory. Re-sync the mirror after any edit:
+```bash
+sudo cp /etc/nginx/sites-enabled/palabra /home/ubuntu/web/conf/palabra.conf
+```
 
 ---
 
@@ -145,6 +197,23 @@ Additional per-persona profiles live in `.env` as `{PROFILE}_*` env vars. Each i
 | HACK | thymia | Hackathon variant (same structure as FERGUS) |
 | TONYW | video-avatar (no Thymia/Shen) | Tony Wang persona, OpenAI direct LLM |
 | JOSBOH | video-avatar | Joe Bohling persona |
+| PHOTO | photo-avatar | gpt-4o-mini + ElevenLabs + LemonSlice. Avatar URL defaults to `/photo-uploads/latest.jpg`; voice selected dynamically per-session by `/upload-photo` based on detected sex + age. |
+
+#### Photo upload pipeline (PHOTO profile)
+
+The PHOTO demo has two extra moving parts beyond the standard profile config:
+
+| Component | Purpose |
+|---|---|
+| `simple-backend/photo/vision.py` | Calls GPT-4o-mini with the uploaded image. Returns `{sex, age_bucket, bbox}`. Uses `PHOTO_VISION_API_KEY` (or `OPENAI_API_KEY`). |
+| `simple-backend/photo/crop.py` | Pillow-based crop using the bbox + 30 % margin, square in pixel space, resized to max-edge 768 px, JPEG quality 88. Falls back to centre-square if bbox missing. |
+| `simple-backend/photo/voices.py` | Static `(sex, age_bucket) → ElevenLabs voice_id` map of 6 curated voices. Defaults to `cgSgspJ2msm6clMCkdW9` on unknown. |
+| `POST /upload-photo` | Multipart, returns `{id, image_url, sex, age_bucket, voice_id, uploaded_at}`. Writes `<id>.jpg` + `<id>.json` plus atomic `latest.jpg` / `latest.json` swap. |
+| `GET /photo-latest` | Returns the latest uploaded metadata, or `{id:null,…}` if none. |
+| `GET /photo/<id>` | Returns one specific upload's metadata. |
+| `/home/ubuntu/web/uploads/` | Filesystem storage. Served by nginx at `/photo-uploads/`. Currently retained forever (no auto-expire). |
+
+The react-photo-avatar app's "Talk to Avatar" button redirects to `/photo-call?profile=PHOTO&avatar_id=<image_url>&voice_id=<voice_id>&autoconnect=true&returnurl=/photo/result/<id>` — `autoconnect=true` joins the call on page load and `returnurl` brings the user back to their photo page on hangup. `/photo-call` is a forked copy of the standard avatar client (no local video, avatar fullscreen on mobile, chat full-height on desktop), living under `/home/ubuntu/web/photo-call`.
 
 ### Client-side keys
 
@@ -247,6 +316,50 @@ NEXT_PUBLIC_BASE_PATH=/react-video-client-avatar-thymia \
 
 pm2 start react-voice-client react-video-client-avatar react-video-client-avatar-thymia
 pm2 save
+```
+
+#### Rebuild react-photo-avatar (QR upload landing)
+```bash
+cd /home/ubuntu/web/react-photo-avatar
+pm2 stop react-photo-avatar 2>/dev/null
+rm -rf .next
+# (re-run npm install --legacy-peer-deps if package.json changed)
+NEXT_PUBLIC_BASE_PATH=/photo \
+  NEXT_PUBLIC_BACKEND_URL=/simple-backend \
+  NEXT_PUBLIC_AVATAR_APP_URL=/photo-call \
+  npx next build --webpack
+# NEXT_PUBLIC_* must also be in env for `next start`, since basePath is read at runtime:
+NEXT_PUBLIC_BASE_PATH=/photo \
+  NEXT_PUBLIC_BACKEND_URL=/simple-backend \
+  NEXT_PUBLIC_AVATAR_APP_URL=/photo-call \
+  pm2 start npm --name react-photo-avatar -- run start
+pm2 save
+```
+
+#### Rebuild photo-call (avatar client for the photo demo)
+```bash
+cd /home/ubuntu/web/photo-call
+pm2 stop photo-call 2>/dev/null
+rm -rf .next
+# (re-run npm install --legacy-peer-deps if package.json changed)
+NEXT_PUBLIC_BASE_PATH=/photo-call \
+  NEXT_PUBLIC_BACKEND_URL=/simple-backend \
+  npx next build --webpack
+NEXT_PUBLIC_BASE_PATH=/photo-call \
+  NEXT_PUBLIC_BACKEND_URL=/simple-backend \
+  pm2 start npm --name photo-call -- run start
+pm2 save
+```
+
+If you ever need to re-fork the avatar client from agent-samples (e.g. to pick up an upstream fix):
+```bash
+pm2 stop photo-call && rm -rf /home/ubuntu/web/photo-call
+cp -r /home/ubuntu/agent-samples/react-video-client-avatar /home/ubuntu/web/photo-call
+# Re-apply photo-call edits to components/VideoAvatarClient.tsx:
+#   - Drop LocalVideoPreview rendering
+#   - Replace VideoGrid + MobileTabs with the simpler 2-col desktop + avatar-fullscreen mobile layout
+#   - Update package.json name + port (8088)
+# Then rebuild as above.
 ```
 
 **Notes:**

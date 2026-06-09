@@ -1,0 +1,28 @@
+# Next.js + Node build/install artifacts
+**/node_modules/
+**/.next/
+**/.turbo/
+**/dist/
+**/build/
+
+# Lockfiles regenerated per host (avoids merge churn across machines)
+**/package-lock.json
+
+# OS / editor
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
+
+# User-uploaded photos (sensitive — faces) and rotating "latest" pointer.
+# Storage is filesystem; nothing in here belongs in source control.
+uploads/
+
+# Local environment overrides
+.env.local
+.env.*.local
