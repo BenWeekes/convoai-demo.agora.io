@@ -14,8 +14,10 @@
 | Video Avatar Client | https://convoai-demo.agora.io/react-video-client-avatar | Video + Anam avatar agent (VIDEO profile) |
 | Tony Wang Avatar | https://convoai-demo.agora.io/react-video-client-avatar?autoconnect=true&returnurl=/&profile=TONYW | Tony Wang avatar persona (TONYW profile) |
 | AI Therapist (Thymia + Shen) | https://convoai-demo.agora.io/react-video-client-avatar-thymia?autoconnect=true&returnurl=/ | Video avatar + Thymia voice biomarkers + Shen camera vitals (VIDEO_THYMIA_SHEN profile, a.k.a. "Holly"). NOTE: Shen license expired — currently rebuilt with `NEXT_PUBLIC_ENABLE_SHEN=false`, Thymia only |
-| Photo Avatar (QR demo) | https://convoai-demo.agora.io/photo | Upload a photo from a phone → vision picks sex/age + voice → talk to a LemonSlice avatar of yourself (PHOTO profile). "Talk to Avatar" auto-redirects to `/photo-call` with `autoconnect=true&returnurl=/photo/result/<id>` |
-| Photo Call (photo demo avatar client) | https://convoai-demo.agora.io/photo-call | Fork of react-video-client-avatar that hides local video; avatar fills the viewport on mobile, chat takes a full-height left panel on desktop. Lives in /home/ubuntu/web/photo-call (NOT in agent-samples). |
+| Photo Avatar (QR demo) | https://convoai-demo.agora.io/photo | Default: Gemini Live + LemonSlice. Upload a photo → vision picks sex+age → voice (Aoede / Orus) — talk to your photo. 3 min call cap. |
+| Photo Avatar — EVENTDEMO (no timeout) | https://convoai-demo.agora.io/photo?profile=EVENTDEMO | Same flow as above but **no time limit** (idle 24h, max_call_duration_seconds=0). Use for stage/kiosk demos. Isolated gallery at `/uploads/EVENTDEMO/`. |
+| Photo Avatar — EVENTTRU (Trulience co-brand) | https://convoai-demo.agora.io/photo?profile=EVENTTRU | Co-branded with Trulience logo in header. 3 min cap. Isolated gallery at `/uploads/EVENTTRU/`. Env-pinned default avatar (`EVENTTRU_AVATAR_ID`). |
+| Photo Call (photo demo avatar client) | https://convoai-demo.agora.io/photo-call | Fork of react-video-client-avatar. No local video (camera light stays dark). Click anywhere on the avatar tile to toggle fullscreen / showcase mode (black background, no UI). Lives in /home/ubuntu/web/photo-call (NOT in agent-samples). |
 | AI Therapist — Fergus | https://convoai-demo.agora.io/react-video-client-avatar-thymia?autoconnect=true&returnurl=/&profile=FERGUS | Therapist variant with Fergus avatar + voice |
 | AI Therapist — Fergus2 | https://convoai-demo.agora.io/react-video-client-avatar-thymia?autoconnect=true&returnurl=/&profile=FERGUS2 | Same prompt/voice as FERGUS with a different avatar |
 | Shen SDK Test | https://convoai-demo.agora.io/shen-test | Standalone Shen SDK test page |
@@ -33,8 +35,10 @@ All video-avatar clients (both variants) accept optional URL params that the bac
 | `profile` | Profile name (resolves `{PROFILE}_*` env vars in `.env`). Case-insensitive. |
 | `autoconnect=true` | Start the session immediately on page load. |
 | `returnurl` | URL to redirect to on hangup. |
-| `voice_id` | Override the profile's `TTS_VOICE_ID` (works for ElevenLabs, OpenAI, Cartesia, Rime TTS). |
-| `avatar_id` | Override the profile's `AVATAR_ID` (works for Anam and HeyGen). |
+| `voice_id` | Override the profile's `TTS_VOICE_ID` (works for ElevenLabs, OpenAI, Cartesia, Rime TTS) or `mllm.params.voice` (Gemini Live, xAI, OpenAI Realtime). |
+| `avatar_id` | Override the profile's `AVATAR_ID` (works for Anam, HeyGen, generic/LemonSlice). |
+| `prompt`, `greeting` | Override the profile's `DEFAULT_PROMPT` / `DEFAULT_GREETING`. On `/photo-call` these also seed the Settings dialog inputs if you want to tweak before the call. |
+| `max_call_duration_seconds` | Override the profile's auto-hangup cap (0 disables). Default 300 (5 min). Profiles like PHOTO_GEMINI pin 180; EVENTDEMO pins 0. |
 
 Example — run the FERGUS2 prompt with a custom avatar + voice:
 ```
@@ -197,23 +201,30 @@ Additional per-persona profiles live in `.env` as `{PROFILE}_*` env vars. Each i
 | HACK | thymia | Hackathon variant (same structure as FERGUS) |
 | TONYW | video-avatar (no Thymia/Shen) | Tony Wang persona, OpenAI direct LLM |
 | JOSBOH | video-avatar | Joe Bohling persona |
-| PHOTO | photo-avatar | gpt-4o-mini + ElevenLabs + LemonSlice. Avatar URL defaults to `/photo-uploads/latest.jpg`; voice selected dynamically per-session by `/upload-photo` based on detected sex + age. |
+| PHOTO | photo-avatar | gpt-4o-mini + ElevenLabs + LemonSlice. Legacy fallback profile. 3 min call cap. |
+| PHOTO_GEMINI | photo-avatar | Gemini Live + LemonSlice. Default profile for the `/photo` demo. Voice picked from sex (Aoede / Orus). Multilingual: starts English, follows the user. 3 min call cap. |
+| EVENTDEMO | photo-avatar | Same as PHOTO_GEMINI but **no time limit** (`MAX_CALL_DURATION_SECONDS=0`, `IDLE_TIMEOUT=86400`). Use for stage/kiosk demos. |
+| EVENTTRU | photo-avatar | Same as EVENTDEMO + Trulience co-branding (header logo). 3 min cap. Env-pinned default avatar via `EVENTTRU_AVATAR_ID`. |
 
-#### Photo upload pipeline (PHOTO profile)
+#### Photo upload pipeline
 
-The PHOTO demo has two extra moving parts beyond the standard profile config:
+Each photo-avatar profile gets its own isolated gallery directory. The 4 photo-avatar profiles (PHOTO, PHOTO_GEMINI, EVENTDEMO, EVENTTRU) share the same backend pipeline but their uploads / "latest" pointers are scoped per-profile.
 
 | Component | Purpose |
 |---|---|
 | `simple-backend/photo/vision.py` | Calls GPT-4o-mini with the uploaded image. Returns `{sex, age_bucket, bbox}`. Uses `PHOTO_VISION_API_KEY` (or `OPENAI_API_KEY`). |
-| `simple-backend/photo/crop.py` | Pillow-based crop using the bbox + 30 % margin, square in pixel space, resized to max-edge 768 px, JPEG quality 88. Falls back to centre-square if bbox missing. |
-| `simple-backend/photo/voices.py` | Static `(sex, age_bucket) → ElevenLabs voice_id` map of 6 curated voices. Defaults to `cgSgspJ2msm6clMCkdW9` on unknown. |
-| `POST /upload-photo` | Multipart, returns `{id, image_url, sex, age_bucket, voice_id, uploaded_at}`. Writes `<id>.jpg` + `<id>.json` plus atomic `latest.jpg` / `latest.json` swap. |
-| `GET /photo-latest` | Returns the latest uploaded metadata, or `{id:null,…}` if none. |
-| `GET /photo/<id>` | Returns one specific upload's metadata. |
-| `/home/ubuntu/web/uploads/` | Filesystem storage. Served by nginx at `/photo-uploads/`. Currently retained forever (no auto-expire). |
+| `simple-backend/photo/crop.py` | Pillow-based crop using the bbox + 30 % margin, square in pixel space, resized to max-edge 768 px. EXIF orientation normalised up-front so portrait selfies aren't sideways. Falls back to centre-square if bbox missing. |
+| `simple-backend/photo/voices.py` | `pick_voice()` returns an ElevenLabs ID by (sex, age_bucket). `pick_gemini_voice()` returns `Aoede` (female) / `Orus` (male) for Gemini profiles. |
+| `POST /upload-photo?profile=X` | Multipart. Writes to `/uploads/X/<id>.{jpg,json}` plus atomic `latest.{jpg,json}` swap. Response includes `voice_id` (vendor-matched to profile), `voice_id_gemini`, `voice_id_elevenlabs`, `sex`, `age_bucket`, `is_default` flag. |
+| `GET /photos?profile=X&limit=12` | Returns the N most recent uploads in profile X, newest first. If the profile dir is empty, seeds with the curated default photo (`/uploads/photo_default.jpg`) so new profiles aren't blank. |
+| `GET /photo-latest?profile=X` | Returns the most-recent meta in X, or the curated default when the dir is empty. |
+| `GET /photo/<id>?profile=X` | Returns one specific upload's meta. |
+| `/home/ubuntu/web/uploads/` | Filesystem storage. Each profile under its own subdir. `photo_default.{jpg,json}` is the curated starter photo shown to empty galleries. Served by nginx at `/photo-uploads/<profile>/...`. No auto-expire. |
+| `initialize_constants()` fallback | If the requested profile has no `APP_ID` in `.env`, falls back to `PROFILE_FALLBACK` env (default `PHOTO_GEMINI`) so ad-hoc gallery names like `?profile=KIOSK_FOYER` still boot a working agent. |
 
-The react-photo-avatar app's "Talk to Avatar" button redirects to `/photo-call?profile=PHOTO&avatar_id=<image_url>&voice_id=<voice_id>&autoconnect=true&returnurl=/photo/result/<id>` — `autoconnect=true` joins the call on page load and `returnurl` brings the user back to their photo page on hangup. `/photo-call` is a forked copy of the standard avatar client (no local video, avatar fullscreen on mobile, chat full-height on desktop), living under `/home/ubuntu/web/photo-call`.
+The react-photo-avatar landing builds the Talk URL as `/photo-call?profile=<P>&avatar_id=<url>&voice_id=<vendor-matched>&prompt=<persona-with-sex-age>&autoconnect=true&returnurl=/photo?profile=<P>&selected=<id>`. The persona prompt includes detected sex + age and explicitly allows mid-call accent / language / age changes by user request. The voice picker in `lib/photo.ts` has an allowlist (`CASCADING_PROFILES`) of profiles that should receive an ElevenLabs `voice_id`; everything else (Gemini, future MLLMs) prefers `voice_id_gemini`. `/photo-call` is the cloned avatar client (no local video, click anywhere on the avatar to toggle fullscreen showcase mode, no mute / End Call in showcase).
+
+The `?profile=` URL param is shared between the gallery dir name and the agent config name. New profiles get their own gallery dir automatically on first upload; if there's no matching agent env block, the agent borrows config from `PROFILE_FALLBACK`.
 
 ### Client-side keys
 

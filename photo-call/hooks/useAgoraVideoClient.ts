@@ -179,6 +179,19 @@ export function useAgoraVideoClient() {
         rtcClientRef.current = null;
       }
 
+      // Release the underlying MediaStreamTracks. Agora's client.leave() only
+      // tears down the WebRTC peer connection — without calling close() on the
+      // local track the browser keeps the mic device acquired, which is what
+      // the browser tab's red recording dot reflects.
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const lat = localAudioTrack as any;
+        if (lat?.close) lat.close();
+        else if (lat?.stop) lat.stop();
+      } catch {
+        /* track may already be closed */
+      }
+
       rtmListenersRef.current.clear();
       setRtmSource(null);
       setLocalAudioTrack(null);
@@ -195,7 +208,7 @@ export function useAgoraVideoClient() {
     } catch (error) {
       console.error("Error leaving channel:", error);
     }
-  }, []);
+  }, [localAudioTrack]);
 
   const joinChannel = useCallback(
     async (config: VoiceClientConfig) => {

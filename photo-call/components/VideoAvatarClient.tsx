@@ -10,6 +10,8 @@ import {
   Phone,
   PhoneOff,
   SendHorizontal,
+  Maximize,
+  Minimize,
 } from "lucide-react";
 import { useAgoraVideoClient } from "@/hooks/useAgoraVideoClient";
 import { useAudioVisualization } from "@/hooks/useAudioVisualization";
@@ -112,6 +114,26 @@ export function VideoAvatarClient() {
   const [enableLocalVideo, setEnableLocalVideo] = useState(false);
   const [enableAvatar, setEnableAvatar] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isShowcase, setIsShowcase] = useState(false);
+
+  // Keep React state in sync when the browser exits fullscreen (Esc, swipe).
+  useEffect(() => {
+    const handler = () => setIsShowcase(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", handler);
+    return () => document.removeEventListener("fullscreenchange", handler);
+  }, []);
+
+  const toggleShowcase = async () => {
+    try {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+      } else {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch (err) {
+      console.error("Fullscreen toggle failed:", err);
+    }
+  };
   const [enableAivad, setEnableAivad] = useState(true);
   const [language, setLanguage] = useState("en-US");
   const [profile, setProfile] = useState("");
@@ -205,6 +227,16 @@ export function VideoAvatarClient() {
       const xh = params.get("xhandle");
       if (xh) {
         setXHandleOverride(xh);
+      }
+      // URL-or-Settings: ?prompt= and ?greeting= seed the Settings inputs.
+      // No localStorage — refresh the page to clear.
+      const urlPrompt = params.get("prompt");
+      if (urlPrompt) {
+        setPrompt(urlPrompt);
+      }
+      const urlGreeting = params.get("greeting");
+      if (urlGreeting) {
+        setGreeting(urlGreeting);
       }
 
       let cleanedUrl = false;
@@ -742,9 +774,9 @@ export function VideoAvatarClient() {
   }
 
   return (
-    <div className="flex h-screen flex-col bg-background overflow-hidden">
-      {/* Header */}
-      <header className="flex-shrink-0 px-4 py-3 md:py-4">
+    <div className={`flex h-screen flex-col overflow-hidden ${isShowcase ? "bg-black" : "bg-background"}`}>
+      {/* Header (hidden in showcase / fullscreen mode) */}
+      <header className={`flex-shrink-0 px-4 py-3 md:py-4 ${isShowcase ? "hidden" : ""}`}>
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg md:text-xl font-bold flex items-center gap-2">
@@ -775,7 +807,13 @@ export function VideoAvatarClient() {
       </header>
 
       {/* Main Content */}
-      <main className="flex flex-1 px-4 py-1 md:py-6 min-h-0 overflow-hidden min-w-0">
+      <main
+        className={
+          isShowcase
+            ? "flex flex-1 min-h-0 overflow-hidden min-w-0 bg-black"
+            : "flex flex-1 px-4 py-1 md:py-6 min-h-0 overflow-hidden min-w-0"
+        }
+      >
         {!isConnected ? (
           /* Connection Form - Centered (same as original) */
           <div className="flex flex-1 items-center justify-center">
@@ -869,9 +907,22 @@ export function VideoAvatarClient() {
         ) : (
           /* Connected: photo-call layout — no local video, avatar + chat full-height */
           <>
-            {/* Desktop: chat left full-height + avatar right full-height */}
-            <div className="hidden md:flex flex-1 min-h-0 gap-4 p-4">
-              <div className="w-2/5 min-w-0 rounded-lg border bg-card shadow-lg overflow-hidden flex flex-col">
+            {/* Desktop: chat left full-height + avatar right full-height
+                (in showcase mode: chat hidden, avatar fills viewport, black bg, no padding) */}
+            <div
+              className={
+                isShowcase
+                  ? "hidden md:flex flex-1 min-h-0 bg-black"
+                  : "hidden md:flex flex-1 min-h-0 gap-4 p-4"
+              }
+            >
+              <div
+                className={
+                  isShowcase
+                    ? "hidden"
+                    : "w-2/5 min-w-0 rounded-lg border bg-card shadow-lg overflow-hidden flex flex-col"
+                }
+              >
                 <div className="border-b p-4 flex items-center justify-between flex-shrink-0">
                   <h2 className="font-semibold">Conversation</h2>
                   <p className="text-sm text-muted-foreground">
@@ -980,20 +1031,54 @@ export function VideoAvatarClient() {
                   </div>
                 </div>
               </div>
-              <div className="flex-1 min-w-0 rounded-lg border bg-card shadow-lg overflow-hidden flex items-center justify-center bg-muted/20">
+              <div
+                onClick={toggleShowcase}
+                className={
+                  (isShowcase
+                    ? "flex-1 min-w-0 relative flex items-center justify-center bg-black"
+                    : "flex-1 min-w-0 rounded-lg border bg-card shadow-lg overflow-hidden flex items-center justify-center bg-muted/20 relative") +
+                  " cursor-pointer"
+                }
+              >
                 <AvatarVideoDisplay
                   videoTrack={avatarVideoTrack}
                   state={avatarVideoTrack ? "connected" : "disconnected"}
-                  className="h-full w-full"
+                  className={
+                    isShowcase
+                      ? "h-full w-full !bg-black !rounded-none"
+                      : "h-full w-full"
+                  }
                   useMediaStream={true}
                   objectFit="contain"
-                  placeholder={<p className="text-sm text-muted-foreground animate-pulse">Loading…</p>}
+                  placeholder={
+                    <p
+                      className={
+                        isShowcase
+                          ? "text-sm text-white/70 animate-pulse"
+                          : "text-sm text-muted-foreground animate-pulse"
+                      }
+                    >
+                      Loading…
+                    </p>
+                  }
                 />
+                {/* Discoverable fullscreen affordance — purely visual,
+                    the whole tile is clickable. */}
+                <div
+                  className="absolute top-3 right-3 h-10 w-10 flex items-center justify-center rounded-full bg-white/15 backdrop-blur-md text-white border border-white/20 pointer-events-none"
+                  aria-hidden
+                >
+                  {isShowcase ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
+                </div>
               </div>
             </div>
 
-            {/* Mobile: avatar fills viewport, floating End Call + mute */}
-            <div className="flex md:hidden flex-1 min-h-0 relative bg-black">
+            {/* Mobile: avatar fills viewport. Floating mute + End Call hidden
+                in showcase/fullscreen mode — must exit fullscreen to access. */}
+            <div
+              onClick={toggleShowcase}
+              className="flex md:hidden flex-1 min-h-0 relative bg-black cursor-pointer"
+            >
               <AvatarVideoDisplay
                 videoTrack={avatarVideoTrack}
                 state={avatarVideoTrack ? "connected" : "disconnected"}
@@ -1002,24 +1087,34 @@ export function VideoAvatarClient() {
                 objectFit="contain"
                 placeholder={<p className="text-sm text-white/70 animate-pulse">Loading…</p>}
               />
+              {!isShowcase && (
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  className="absolute left-0 right-0 flex items-center justify-center gap-4"
+                  style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 1.5rem)" }}
+                >
+                  <button
+                    onClick={toggleMute}
+                    className="cursor-pointer h-14 w-14 flex items-center justify-center rounded-full bg-white/15 backdrop-blur-md text-white border border-white/20"
+                    aria-label={isMuted ? "Unmute" : "Mute"}
+                  >
+                    {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
+                  </button>
+                  <button
+                    onClick={handleStop}
+                    className="cursor-pointer flex items-center gap-2 rounded-full bg-destructive px-6 py-3.5 text-base font-semibold text-destructive-foreground shadow-lg"
+                  >
+                    <PhoneOff className="h-5 w-5" />
+                    End Call
+                  </button>
+                </div>
+              )}
+              {/* Fullscreen affordance (visual only — tap anywhere works) */}
               <div
-                className="absolute left-0 right-0 flex items-center justify-center gap-4"
-                style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 1.5rem)" }}
+                className="absolute top-3 right-3 h-10 w-10 flex items-center justify-center rounded-full bg-white/15 backdrop-blur-md text-white border border-white/20 pointer-events-none"
+                aria-hidden
               >
-                <button
-                  onClick={toggleMute}
-                  className="cursor-pointer h-14 w-14 flex items-center justify-center rounded-full bg-white/15 backdrop-blur-md text-white border border-white/20"
-                  aria-label={isMuted ? "Unmute" : "Mute"}
-                >
-                  {isMuted ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-                </button>
-                <button
-                  onClick={handleStop}
-                  className="cursor-pointer flex items-center gap-2 rounded-full bg-destructive px-6 py-3.5 text-base font-semibold text-destructive-foreground shadow-lg"
-                >
-                  <PhoneOff className="h-5 w-5" />
-                  End Call
-                </button>
+                {isShowcase ? <Minimize className="h-4 w-4" /> : <Maximize className="h-4 w-4" />}
               </div>
             </div>
           </>
