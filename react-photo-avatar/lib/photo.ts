@@ -24,6 +24,7 @@ export type PhotoMeta = {
   voice_id: string | null              // ElevenLabs voice id (PHOTO profile)
   voice_id_gemini?: string | null      // Gemini Live voice (PHOTO_GEMINI / EVENTDEMO)
   uploaded_at?: number
+  is_default?: boolean                 // True for the curated empty-profile seed
 }
 
 export async function uploadPhoto(
@@ -90,6 +91,17 @@ export async function getPhoto(
   return (await res.json()) as PhotoMeta
 }
 
+export async function deletePhoto(
+  id: string,
+  profile: string = DEFAULT_PROFILE,
+): Promise<boolean> {
+  const res = await fetch(
+    `${BACKEND}/photo/${encodeURIComponent(id)}?profile=${encodeURIComponent(profile)}`,
+    { method: "DELETE" },
+  )
+  return res.ok || res.status === 404
+}
+
 export async function listPhotos(
   profile: string = DEFAULT_PROFILE,
   limit = 12,
@@ -102,7 +114,15 @@ export async function listPhotos(
   return (await res.json()) as PhotoMeta[]
 }
 
-function buildPersonaPrompt(meta: PhotoMeta): string {
+// Profiles whose avatar always presents as female (Anam asset is female).
+// We force the persona's sex to "female" regardless of the photo's detected
+// sex so the model picks a female voice consistently.
+const FEMALE_AVATAR_PROFILES = new Set(["EVENTANAM", "EVENTANAMGRADIUM"])
+
+function buildPersonaPrompt(
+  meta: PhotoMeta,
+  profile: string = DEFAULT_PROFILE,
+): string {
   const age =
     meta.age_bucket === "young"
       ? "young"
@@ -111,19 +131,35 @@ function buildPersonaPrompt(meta: PhotoMeta): string {
         : meta.age_bucket === "middle"
           ? "middle-aged"
           : ""
-  const sex = meta.sex ?? ""
+  const sex = FEMALE_AVATAR_PROFILES.has(profile)
+    ? "female"
+    : meta.sex ?? ""
   const persona = [age, sex].filter(Boolean).join(" ")
+  const isEventAnam = profile === "EVENTANAM"
+  const voiceStyle = isEventAnam
+    ? `Always speak in a warm, natural ${sex || "female"} voice with normal volume and pacing. ` +
+      "Only switch into a whisper if the user explicitly asks you to whisper — when they do, drop " +
+      "almost fully into a whisper for the rest of the conversation until they ask otherwise. " +
+      "Do not switch to a male voice. "
+    : `Always speak in a warm, natural ${sex || ""} voice and do not switch to a male voice. `
   const appearance = persona
-    ? `Based on the photo you appear as a ${persona} person. Speak in a voice that fits that. `
+    ? `You appear as a ${persona} person. ${voiceStyle}`
     : ""
+  const eventContext = isEventAnam
+    ? "Context: you are live on stage in Barcelona, Spain, at the Voice AI Space Barcelona event, " +
+      "being presented to the audience as a demo. Acknowledge the location and event naturally when " +
+      "it fits, and feel free to greet the room. Spanish or Catalan replies are welcome if the user " +
+      "switches. "
+    : ""
+  const wordCap = isEventAnam ? 45 : 30
   return (
-    `You are a friendly avatar. The user can both see and hear you. ${appearance}` +
+    `You are a friendly avatar. The user can both see and hear you. ${appearance}${eventContext}` +
     "Start the conversation in English with a neutral conversational style. " +
     "If the user speaks in or asks for another language at any point, switch to that language " +
     "for the rest of the conversation. " +
     "If the user asks you to switch accent (e.g. Welsh, French, Indian, American), " +
     "change character, or change age, follow their instruction for the rest of the conversation. " +
-    "Keep responses below 30 words where possible."
+    `Keep responses below ${wordCap} words where possible.`
   )
 }
 
@@ -133,18 +169,28 @@ function buildPersonaPrompt(meta: PhotoMeta): string {
 // ElevenLabs ID to Gemini Live.
 const CASCADING_PROFILES = new Set(["PHOTO"])
 
+// Profiles whose avatar + voice are pinned at the backend (vendor needs a
+// UUID, not a photo URL — e.g. Anam — and the voice must match the MLLM
+// vendor on the profile). Talk URLs for these profiles intentionally do NOT
+// pass avatar_id / voice_id, so the backend uses its profile defaults. The
+// gallery photo still drives the persona prompt (sex / age detection).
+const FIXED_AVATAR_PROFILES = new Set(["EVENTANAM", "EVENTANAMGRADIUM"])
+
 export function avatarTalkUrl(
   meta: PhotoMeta,
   profile: string = DEFAULT_PROFILE,
 ): string {
   const params = new URLSearchParams({ profile })
-  if (meta.image_url) params.set("avatar_id", meta.image_url)
-  const voiceForProfile = CASCADING_PROFILES.has(profile)
-    ? meta.voice_id || undefined
-    : meta.voice_id_gemini || meta.voice_id || undefined
-  if (voiceForProfile) params.set("voice_id", voiceForProfile)
+  const fixedAvatar = FIXED_AVATAR_PROFILES.has(profile)
+  if (!fixedAvatar && meta.image_url) params.set("avatar_id", meta.image_url)
+  if (!fixedAvatar) {
+    const voiceForProfile = CASCADING_PROFILES.has(profile)
+      ? meta.voice_id || undefined
+      : meta.voice_id_gemini || meta.voice_id || undefined
+    if (voiceForProfile) params.set("voice_id", voiceForProfile)
+  }
   // Persona prompt baked with detected age + sex + accent-change permission
-  params.set("prompt", buildPersonaPrompt(meta))
+  params.set("prompt", buildPersonaPrompt(meta, profile))
   // Auto-connect and return to this photo's gallery on hangup (preserving profile).
   params.set("autoconnect", "true")
   const returnQuery = new URLSearchParams({ profile })

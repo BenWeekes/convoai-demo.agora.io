@@ -774,7 +774,7 @@ export function VideoAvatarClient() {
   }
 
   return (
-    <div className={`flex h-screen flex-col overflow-hidden ${isShowcase ? "bg-black" : "bg-background"}`}>
+    <div className={`flex h-screen flex-col overflow-hidden ${isShowcase ? "bg-black [&_*]:cursor-none cursor-none" : "bg-background"}`}>
       {/* Header (hidden in showcase / fullscreen mode) */}
       <header className={`flex-shrink-0 px-4 py-3 md:py-4 ${isShowcase ? "hidden" : ""}`}>
         <div className="flex items-center justify-between">
@@ -1034,10 +1034,9 @@ export function VideoAvatarClient() {
               <div
                 onClick={toggleShowcase}
                 className={
-                  (isShowcase
-                    ? "flex-1 min-w-0 relative flex items-center justify-center bg-black"
-                    : "flex-1 min-w-0 rounded-lg border bg-card shadow-lg overflow-hidden flex items-center justify-center bg-muted/20 relative") +
-                  " cursor-pointer"
+                  isShowcase
+                    ? "flex-1 min-w-0 relative flex items-center justify-center bg-black cursor-none"
+                    : "flex-1 min-w-0 rounded-lg border bg-card shadow-lg overflow-hidden flex items-center justify-center bg-muted/20 relative cursor-pointer"
                 }
               >
                 <AvatarVideoDisplay
@@ -1077,7 +1076,10 @@ export function VideoAvatarClient() {
                 in showcase/fullscreen mode — must exit fullscreen to access. */}
             <div
               onClick={toggleShowcase}
-              className="flex md:hidden flex-1 min-h-0 relative bg-black cursor-pointer"
+              className={
+                "flex md:hidden flex-1 min-h-0 relative bg-black " +
+                (isShowcase ? "cursor-none" : "cursor-pointer")
+              }
             >
               <AvatarVideoDisplay
                 videoTrack={avatarVideoTrack}

@@ -25,6 +25,9 @@
 | Simple Voice (with backend) | https://convoai-demo.agora.io/simple-voice-client-with-backend/ | Static HTML demo, uses backend |
 | Custom LLM health | https://convoai-demo.agora.io/custom-llm/ | Custom LLM proxy (Thymia + Shen modules) |
 | Backend health | https://convoai-demo.agora.io/simple-backend/health | Flask simple-backend |
+| Benchmark Harness | https://convoai-demo.agora.io/benchmark | Agora [turn-accuracy / response-latency framework](https://github.com/AgoraIO-Conversational-AI/turn-accuracy-and-response-latency-detection-framework). FastAPI + WebSocket UI for TTFA / barge-in / no-response metrics. Lives in `/home/ubuntu/web/benchmark`. **Note:** the audio playback harness needs BlackHole virtual devices (macOS-only) — on this Linux host the UI loads and the bundled fixtures in `out/` are browsable, but live playback won't capture agent audio (no sound card). |
+| EDT demo (vanity URL) | https://convoai-demo.agora.io/edt | nginx 301 → `/react-video-client-luma?profile=edt`. Friendly URL for sharing. |
+| EDT demo (full URL) | https://convoai-demo.agora.io/react-video-client-luma?profile=edt | react-video-client-luma client from the [rishi_edt](https://github.com/BenWeekes/rishi_edt) fork. Gemini Live MLLM (`Aoede` voice) + generic (LemonSlice) avatar — `EDT_AVATAR_ID` points at `/assets/EDT_avatar.png`. Lives in `/home/ubuntu/rishi_edt/agent-samples/react-video-client-luma`. Uses the shared simple-backend (`EDT_*` env vars). 3 min call cap. |
 
 ### URL query params
 
@@ -58,6 +61,8 @@ Example — run the FERGUS2 prompt with a custom avatar + voice:
 | react-photo-avatar | 8085 | `/home/ubuntu/web/react-photo-avatar` | Next.js, basePath=/photo, photo upload + Talk-to-Avatar landing (PHOTO profile). Lives in /home/ubuntu/web (NOT agent-samples) |
 | photo-call | 8088 | `/home/ubuntu/web/photo-call` | Next.js, basePath=/photo-call. Cloned + simplified `react-video-client-avatar`: no local video, avatar fills viewport on mobile, chat full-height on desktop. Lives in /home/ubuntu/web (NOT agent-samples) |
 | server-custom-llm | 8100 | `/home/ubuntu/server-custom-llm/node` | Custom LLM proxy with Thymia + Shen modules |
+| react-video-client-luma | 8087 | `/home/ubuntu/rishi_edt/agent-samples/react-video-client-luma` | Next.js, basePath=/react-video-client-luma. Backs the **EDT demo** (`?profile=edt`) — see vanity URL `/edt`. Source from the [rishi_edt](https://github.com/BenWeekes/rishi_edt) fork (cloned to `/home/ubuntu/rishi_edt`); reuses the shared simple-backend on :8082 (EDT_* env vars added to its `.env`). Required NEXT_PUBLIC_* env at both build + start: `NEXT_PUBLIC_BASE_PATH=/react-video-client-luma`, `NEXT_PUBLIC_BACKEND_URL=/simple-backend`, `NEXT_PUBLIC_DEFAULT_PROFILE=edt`. Assets (AF.*.png, EDT_avatar.png, Grey_AF.mtl, kitchen_bg.png) are **symlinked** from this app's `public/assets/` into `/home/ubuntu/agent-samples/assets/` so the existing nginx `/assets/` alias serves them alongside the legacy logos/screenshots without an extra location block. Heads-up: code references `/assets/Grey_AF.obj` which is NOT in the repo — ThreeDCanvas.tsx has a procedural fallback that engages when it 404s. |
+| benchmark | 8000 | `/home/ubuntu/web/benchmark` | FastAPI + WebSocket, [turn-accuracy / response-latency framework](https://github.com/AgoraIO-Conversational-AI/turn-accuracy-and-response-latency-detection-framework). Started via `venv/bin/python -m src.harness`. nginx proxies `/benchmark/` → `:8000/`. **Upstream now contains every patch this box was carrying** (commit `0f52785` on `AgoraIO-Conversational-AI/turn-accuracy-…/main`): (1) relative-URL static frontend + path-derived WebSocket base so the page works under the `/benchmark` prefix; (2) browser-side audio harness `static/browser_harness.js` mirrors `audio_engine.py` + `vad_engine.py` + the TTFA / barge-in / no-response loop — playback via `<audio>` + `HTMLMediaElement.setSinkId`, capture via `getUserMedia` + 16 kHz `AudioContext` + `ScriptProcessor` wired through a gain-0 sink (avoids a feedback path with built-in mic). Browser mode is the only mode in the UI now (no toggle); audio runs on the *operator's* Mac while this server hosts the UI / corpus / result store; (3) 3-step Setup modal (install BlackHole → Multi-Output Device with BlackHole 16ch + speakers as system output → open agent in another tab with mic=BlackHole 2ch, then Run All) with how/why subnotes and copy buttons on every code block; (4) device picker reads `navigator.mediaDevices.enumerateDevices()`. Three slots — **Output 1 (to agent under test)**, **Output 2 (to hear locally)**, **Input (audio from agent under test)** — auto-pick BlackHole 2ch / first non-BlackHole output / BlackHole 16ch by label match, persisted as `{id, pinned}` in `localStorage` (`benchmark.deviceIds.v2`) so manual changes survive reloads / BlackHole reinstall; (5) live RMS amplitude meter under the Input dropdown with the VAD threshold marker, sanity-checks routing before pressing Play; (6) `AbortController` plumbed through Stop / Reset / new-Run-All so in-flight poll loops abort cleanly instead of dragging into the next run's row; runId-tagged DevTools logging; (7) phase events flip the row's status badge + TTFA cell the instant VAD trips (no end-of-turn wait); barge-in rows leave the TTFA cell blank and are excluded from avg / median / p95 on both client + server; (8) `GET /api/wav/{source}/{speaker}/{turn_id}` serves WAVs to the browser harness; `POST /api/results/submit` + `TurnManager.ingest_browser_result()` ingest browser-measured results into the canonical summary store with `source:"browser"` echoed on `turn_done`. Output-device selection requires Chrome / Edge / Opera / Brave (no `setSinkId` in Firefox / Safari). docs/ai progressive-disclosure docs updated to reflect both modes. |
 
 **PM2 config:** `/home/ubuntu/agent-samples/ecosystem.config.js`
 **PM2 commands:** `pm2 start ecosystem.config.js`, `pm2 save`, `pm2 restart all`
@@ -135,6 +140,42 @@ location ^~ /photo-uploads/ {
     }
     autoindex off;
 }
+
+# benchmark - Agora turn-accuracy / response-latency framework UI
+# (FastAPI + WebSocket on :8000). MUST use ^~ so the static-asset regex
+# location later in this file doesn't try to serve /benchmark/*.js etc.
+# from /var/www/palabra. Trailing-slash + trailing-slash proxy_pass
+# strips /benchmark before forwarding so upstream sees /api/..., /ws,
+# /static/... unchanged. Bare /benchmark redirects to /benchmark/ so
+# relative asset URLs resolve under the prefix.
+location = /benchmark { return 301 /benchmark/; }
+location ^~ /benchmark/ {
+    proxy_pass http://localhost:8000/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_read_timeout 3600s;
+}
+
+# react-video-client-luma — rishi_edt EDT demo. basePath=/react-video-client-luma.
+# ^~ to beat the regex cache-static block on .js/.css/.png under the prefix.
+location ^~ /react-video-client-luma {
+    proxy_pass http://localhost:8087;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+}
+
+# /edt — vanity URL → react-video-client-luma with the edt profile.
+location = /edt { return 301 /react-video-client-luma?profile=edt; }
 ```
 
 Also bumped server-wide `client_max_body_size` from `10M` to `20M` to allow phone-camera JPEG uploads (backend caps at 15 MB).
@@ -205,6 +246,7 @@ Additional per-persona profiles live in `.env` as `{PROFILE}_*` env vars. Each i
 | PHOTO_GEMINI | photo-avatar | Gemini Live + LemonSlice. Default profile for the `/photo` demo. Voice picked from sex (Aoede / Orus). Multilingual: starts English, follows the user. 3 min call cap. |
 | EVENTDEMO | photo-avatar | Same as PHOTO_GEMINI but **no time limit** (`MAX_CALL_DURATION_SECONDS=0`, `IDLE_TIMEOUT=86400`). Use for stage/kiosk demos. |
 | EVENTTRU | photo-avatar | Same as EVENTDEMO + Trulience co-branding (header logo). 3 min cap. Env-pinned default avatar via `EVENTTRU_AVATAR_ID`. |
+| EDT | react-video-client-luma | Gemini Live (`Aoede`) + generic (LemonSlice) avatar. Used by the [rishi_edt](https://github.com/BenWeekes/rishi_edt) demo. Vanity URL `/edt`, full URL `/react-video-client-luma?profile=edt`. Static avatar PNG at `/assets/EDT_avatar.png` (symlinked from `rishi_edt/.../react-video-client-luma/public/assets/EDT_avatar.png`). 3 min cap. The `EDT_*` env vars are read in **strict** mode — the rishi_edt fork has no `VIDEO_*` fallback for unknown profiles, so every key in the example block has to be set. |
 
 #### Photo upload pipeline
 

@@ -26,3 +26,6 @@ uploads/
 # Local environment overrides
 .env.local
 .env.*.local
+
+# upstream repo clone for /benchmark — managed separately, not part of this repo
+benchmark/

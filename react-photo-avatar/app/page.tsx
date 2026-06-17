@@ -2,11 +2,12 @@
 
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { Suspense, useEffect, useMemo, useState } from "react"
+import { Suspense, useEffect, useMemo, useRef, useState } from "react"
 import { PageHeader } from "@/components/PageHeader"
 import {
   avatarTalkUrl,
   DEFAULT_PROFILE,
+  deletePhoto,
   listPhotos,
   normalizeProfile,
   type PhotoMeta,
@@ -20,6 +21,9 @@ function HomePageInner() {
   const [photos, setPhotos] = useState<PhotoMeta[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(initialSelected)
   const [loading, setLoading] = useState(true)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     listPhotos(profile, 12)
@@ -27,6 +31,12 @@ function HomePageInner() {
       .catch(() => setPhotos([]))
       .finally(() => setLoading(false))
   }, [profile])
+
+  useEffect(() => {
+    return () => {
+      if (confirmTimer.current) clearTimeout(confirmTimer.current)
+    }
+  }, [])
 
   // Default selection: explicit ?selected= if present, else the most recent.
   const selected = useMemo(() => {
@@ -40,6 +50,39 @@ function HomePageInner() {
     profile === DEFAULT_PROFILE
       ? "/upload"
       : `/upload?profile=${encodeURIComponent(profile)}`
+
+  // The curated seed photo (is_default:true) is shared across empty profiles
+  // and isn't actually in this profile's directory, so deletion is a no-op
+  // server-side — disable the button to avoid the confusing UX.
+  const canDelete = !!selected?.id && !selected.is_default && !deleting
+
+  const armDelete = () => {
+    if (!canDelete) return
+    if (confirmingDelete) {
+      void commitDelete()
+      return
+    }
+    setConfirmingDelete(true)
+    if (confirmTimer.current) clearTimeout(confirmTimer.current)
+    confirmTimer.current = setTimeout(() => setConfirmingDelete(false), 4000)
+  }
+
+  const commitDelete = async () => {
+    if (!selected?.id) return
+    if (confirmTimer.current) {
+      clearTimeout(confirmTimer.current)
+      confirmTimer.current = null
+    }
+    setDeleting(true)
+    const ok = await deletePhoto(selected.id, profile)
+    setDeleting(false)
+    setConfirmingDelete(false)
+    if (!ok) return
+    setPhotos((prev) => prev.filter((p) => p.id !== selected.id))
+    setSelectedId(null)
+    // Re-pull so the server-side seed reappears if the gallery just emptied.
+    void listPhotos(profile, 12).then((list) => setPhotos(list))
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-black text-white">
@@ -85,22 +128,44 @@ function HomePageInner() {
               )}
             </div>
 
-            {/* Action buttons */}
-            <div className="w-full flex flex-col gap-3 mt-1">
-              {selected && (
+            {/* Action buttons — single row of three to save vertical space */}
+            <div className="w-full grid grid-cols-3 gap-2 mt-1">
+              {selected ? (
                 <a
                   href={avatarTalkUrl(selected, profile)}
-                  className="block w-full rounded-2xl bg-white text-black py-4 text-center text-base sm:text-lg font-semibold active:scale-[0.98] transition-transform"
+                  className="rounded-2xl bg-white text-black py-4 text-center text-sm sm:text-base font-semibold active:scale-[0.98] transition-transform"
                 >
-                  💬 Talk to this avatar
+                  💬 Talk
                 </a>
+              ) : (
+                <div />
               )}
               <Link
                 href={uploadHref}
-                className="block w-full rounded-2xl border border-white/30 py-3 text-center text-base sm:text-lg font-medium"
+                className="rounded-2xl border border-white/30 py-4 text-center text-sm sm:text-base font-medium active:scale-[0.98] transition-transform"
               >
-                📷 Upload a fresh photo
+                📷 Upload
               </Link>
+              <button
+                type="button"
+                onClick={armDelete}
+                disabled={!canDelete}
+                className={
+                  "rounded-2xl py-4 text-center text-sm sm:text-base font-medium active:scale-[0.98] transition-transform " +
+                  (confirmingDelete
+                    ? "bg-red-600 text-white"
+                    : "border border-white/30 text-white disabled:opacity-30")
+                }
+                aria-label={
+                  confirmingDelete ? "Confirm delete" : "Delete photo"
+                }
+              >
+                {deleting
+                  ? "Deleting…"
+                  : confirmingDelete
+                    ? "Confirm?"
+                    : "🗑 Delete"}
+              </button>
             </div>
 
             {/* 4 × 3 grid of recent uploads */}
