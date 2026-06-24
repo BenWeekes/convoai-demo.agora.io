@@ -167,7 +167,7 @@ function buildPersonaPrompt(
 // Everything else is assumed to use a realtime MLLM (Gemini) with short
 // voice names — fall back to voice_id_gemini first to avoid sending an
 // ElevenLabs ID to Gemini Live.
-const CASCADING_PROFILES = new Set(["PHOTO"])
+const CASCADING_PROFILES = new Set(["PHOTO", "LES"])
 
 // Profiles whose avatar + voice are pinned at the backend (vendor needs a
 // UUID, not a photo URL — e.g. Anam — and the voice must match the MLLM

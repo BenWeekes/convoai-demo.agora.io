@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Live News — Leila</title>
+  <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.21.0.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; background: #000; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+    body { display: flex; flex-direction: column; overflow: hidden; }
+
+    header {
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      background: #0a0a14;
+      border-bottom: 1px solid #1a1a2e;
+      font-size: 0.85rem;
+    }
+    header h1 { font-size: 1rem; font-weight: 600; }
+    header .meta { color: #888; }
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: #f44336;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 6px;
+      transition: background 200ms;
+    }
+    .dot.connected { background: #4caf50; }
+    .dot.connecting { background: #ff9800; }
+
+    main {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: #000;
+    }
+    #avatar {
+      position: absolute;
+      inset: 0;
+      background: #000;
+    }
+    #avatar video {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: contain !important;
+      background: #000 !important;
+    }
+
+    .overlay-msg {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #aaa;
+      font-size: 0.95rem;
+      text-align: center;
+      max-width: 80%;
+    }
+    .overlay-msg.hidden { display: none; }
+    .err { color: #ff8a8a; }
+
+    .audio-unmute {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1976d2;
+      color: #fff;
+      border: 0;
+      border-radius: 999px;
+      padding: 10px 22px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      z-index: 10;
+    }
+    .audio-unmute.hidden { display: none; }
+    .audio-unmute:hover { background: #1e88e5; }
+
+    footer {
+      flex-shrink: 0;
+      padding: 6px 16px;
+      background: #0a0a14;
+      border-top: 1px solid #1a1a2e;
+      font-size: 0.75rem;
+      color: #777;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px 16px;
+    }
+    footer .now { color: #ccc; flex: 1; min-width: 200px; }
+    footer code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: #9aa; }
+
+    .btn-hangup {
+      margin-left: auto;
+      background: #b71c1c;
+      color: #fff;
+      border: 0;
+      border-radius: 4px;
+      padding: 6px 14px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-hangup:hover { background: #c62828; }
+    .btn-hangup:disabled { background: #444; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <header>
+    <span><span id="status-dot" class="dot"></span><span id="status-text">connecting…</span></span>
+    <h1>Live News</h1>
+    <span class="meta">channel: <code id="channel-name">—</code></span>
+    <span class="meta" id="agent-meta" style="display:none">agent: <code id="agent-id">—</code></span>
+    <span class="meta" style="margin-left: auto;" id="viewer-count">1 viewer</span>
+  </header>
+
+  <main>
+    <div id="avatar"></div>
+    <div id="overlay" class="overlay-msg">
+      Connecting to channel…
+    </div>
+    <button id="unmute-btn" class="audio-unmute hidden" type="button">🔊 Tap to enable sound</button>
+  </main>
+
+  <footer>
+    <span>BBC World + Hacker News + The Verge</span>
+    <span class="now" id="last-spoke"></span>
+    <button class="btn-hangup" id="btn-hangup" type="button">Hang up</button>
+  </footer>
+
+  <script>
+  // --- Config ---
+  const BACKEND = "/simple-backend";
+  const params = new URLSearchParams(location.search);
+  const channel = (params.get("channel") || "news-default").trim() || "news-default";
+  const profile = (params.get("profile") || "news").trim() || "news";
+  const overlay = document.getElementById("overlay");
+  const statusDot = document.getElementById("status-dot");
+  const statusText = document.getElementById("status-text");
+  const channelName = document.getElementById("channel-name");
+  const viewerCountEl = document.getElementById("viewer-count");
+  const lastSpoke = document.getElementById("last-spoke");
+  const agentMeta = document.getElementById("agent-meta");
+  const agentIdEl = document.getElementById("agent-id");
+  const hangupBtn = document.getElementById("btn-hangup");
+
+  channelName.textContent = channel;
+
+  // Debug-friendly: log everything we know about this session in one place.
+  function logSession() {
+    console.log("[news] channel=%s profile=%s session=%s agent_id=%s",
+                channel, profile, sessionId || "(none)", currentAgentId || "(none)");
+  }
+  let currentAgentId = null;
+
+  function setStatus(state, text) {
+    statusDot.className = "dot " + state;
+    statusText.textContent = text;
+  }
+  function showOverlay(text, isError) {
+    overlay.textContent = text;
+    overlay.className = "overlay-msg" + (isError ? " err" : "");
+  }
+  function hideOverlay() {
+    overlay.classList.add("hidden");
+  }
+
+  // --- Lifecycle ---
+  let client = null;
+  let sessionId = null;
+  let heartbeatTimer = null;
+  let statusTimer = null;
+
+  async function join() {
+    setStatus("connecting", "starting channel…");
+    showOverlay("Starting up Leila — this can take 10-15 seconds on first join…");
+    let payload;
+    try {
+      const resp = await fetch(`${BACKEND}/news/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel, profile }),
+        keepalive: true,
+      });
+      if (!resp.ok) {
+        const body = await resp.text();
+        throw new Error(`HTTP ${resp.status} — ${body}`);
+      }
+      payload = await resp.json();
+    } catch (e) {
+      console.error("[news] join failed:", e);
+      setStatus("", "error");
+      showOverlay("Couldn't connect: " + e.message, true);
+      return;
+    }
+    sessionId = payload.session_id;
+    currentAgentId = payload.agent_id;
+    if (currentAgentId) {
+      agentIdEl.textContent = currentAgentId;
+      agentMeta.style.display = "";
+    }
+    logSession();
+
+    client = AgoraRTC.createClient({ mode: "rtc", codec: "vp8" });
+    // Track video/audio independently so we can surface partial states.
+    let gotVideo = false, gotAudio = false;
+    const unmuteBtn = document.getElementById("unmute-btn");
+    let pendingAudioTrack = null;
+
+    const refreshConnectedState = () => {
+      if (gotVideo && gotAudio) {
+        setStatus("connected", "live");
+        hideOverlay();
+      } else if (gotVideo) {
+        setStatus("connected", "video — audio pending");
+        showOverlay("Audio loading…");
+      } else if (gotAudio) {
+        setStatus("connecting", "audio — avatar rendering");
+        showOverlay("Audio is live. Avatar still rendering (first render can take up to 30s)…");
+      }
+    };
+
+    const tryPlayAudio = async (track) => {
+      try {
+        await track.play();
+        gotAudio = true;
+        unmuteBtn.classList.add("hidden");
+        pendingAudioTrack = null;
+        console.log("[news] audio playing");
+        refreshConnectedState();
+      } catch (e) {
+        // Most common in Chrome / Safari: NotAllowedError until the
+        // user gestures. Surface the unmute button so they can tap.
+        console.warn("[news] audio play blocked, asking for user gesture:", e?.name || e);
+        pendingAudioTrack = track;
+        unmuteBtn.classList.remove("hidden");
+        setStatus("connecting", "tap to enable sound");
+      }
+    };
+
+    unmuteBtn.addEventListener("click", async () => {
+      if (pendingAudioTrack) await tryPlayAudio(pendingAudioTrack);
+    });
+
+    client.on("user-published", async (user, mediaType) => {
+      console.log("[news] user-published uid=%s mediaType=%s", user.uid, mediaType);
+      await client.subscribe(user, mediaType);
+      if (mediaType === "video") {
+        user.videoTrack.play("avatar");
+        gotVideo = true;
+        console.log("[news] video playing uid=%s", user.uid);
+        refreshConnectedState();
+      } else if (mediaType === "audio") {
+        await tryPlayAudio(user.audioTrack);
+      }
+    });
+    client.on("user-unpublished", (user, mediaType) => {
+      console.log("[news] user-unpublished uid=%s mediaType=%s", user.uid, mediaType);
+    });
+    client.on("connection-state-change", (cur, prev) => {
+      console.log("[news] rtc state %s → %s", prev, cur);
+      if (cur === "DISCONNECTED" || cur === "DISCONNECTING") {
+        setStatus("", "disconnected");
+      } else if (cur === "RECONNECTING") {
+        setStatus("connecting", "reconnecting…");
+      }
+    });
+
+    try {
+      await client.join(payload.app_id, payload.channel, payload.token, payload.uid);
+    } catch (e) {
+      console.error("[news] rtc join failed:", e);
+      setStatus("", "error");
+      showOverlay("Agora join failed: " + e.message, true);
+      return;
+    }
+    console.log("[news] rtc joined as uid=%s", payload.uid);
+
+    // Heartbeat every 15 s so the backend's sweeper doesn't tear us
+    // down for inactivity.
+    heartbeatTimer = setInterval(heartbeat, 15000);
+    statusTimer = setInterval(pollStatus, 4000);
+    pollStatus();
+  }
+
+  async function heartbeat() {
+    if (!sessionId) return;
+    try {
+      await fetch(`${BACKEND}/news/heartbeat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel, session_id: sessionId }),
+        keepalive: true,
+      });
+    } catch (e) {
+      console.warn("[news] heartbeat failed:", e);
+    }
+  }
+
+  async function pollStatus() {
+    try {
+      const resp = await fetch(`${BACKEND}/news/status`);
+      const data = await resp.json();
+      const mine = (data.channels || []).find(c => c.channel === channel);
+      if (mine) {
+        viewerCountEl.textContent =
+          (mine.sessions === 1 ? "1 viewer" : `${mine.sessions} viewers`);
+        if (mine.last_text) {
+          lastSpoke.textContent = "• last: " + mine.last_text.slice(0, 100);
+        }
+      }
+    } catch (e) { /* non-fatal */ }
+  }
+
+  function leave() {
+    if (!sessionId) return;
+    const blob = new Blob(
+      [JSON.stringify({ channel, session_id: sessionId })],
+      { type: "application/json" },
+    );
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(`${BACKEND}/news/leave`, blob);
+    } else {
+      fetch(`${BACKEND}/news/leave`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channel, session_id: sessionId }),
+        keepalive: true,
+      });
+    }
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    if (statusTimer) clearInterval(statusTimer);
+    if (client) {
+      try { client.leave(); } catch (e) {}
+    }
+    sessionId = null;
+  }
+  window.addEventListener("beforeunload", leave);
+  window.addEventListener("pagehide", leave);
+
+  // Manual hang-up — leaves the channel and shows a "left" screen.
+  // The backend's last-leaver-out logic still applies: if we were the
+  // only viewer, this also tears down the agent + reader.
+  hangupBtn.addEventListener("click", async () => {
+    if (hangupBtn.disabled) return;
+    hangupBtn.disabled = true;
+    hangupBtn.textContent = "Hanging up…";
+    try {
+      // Synchronous-style: wait for the leave POST so we know the
+      // backend tore down before navigating.
+      if (sessionId) {
+        await fetch(`${BACKEND}/news/leave`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ channel, session_id: sessionId }),
+        });
+      }
+    } catch (e) { console.warn("[news] hangup leave failed:", e); }
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    if (statusTimer) clearInterval(statusTimer);
+    if (client) { try { await client.leave(); } catch (e) {} }
+    sessionId = null;
+    setStatus("", "disconnected");
+    showOverlay("Hung up. Refresh the page to rejoin.");
+    hangupBtn.textContent = "Disconnected";
+  });
+
+  join();
+  </script>
+</body>
+</html>

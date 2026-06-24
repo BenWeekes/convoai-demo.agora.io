@@ -27,7 +27,9 @@
 | Backend health | https://convoai-demo.agora.io/simple-backend/health | Flask simple-backend |
 | Benchmark Harness | https://convoai-demo.agora.io/benchmark | Agora [turn-accuracy / response-latency framework](https://github.com/AgoraIO-Conversational-AI/turn-accuracy-and-response-latency-detection-framework). FastAPI + WebSocket UI for TTFA / barge-in / no-response metrics. Lives in `/home/ubuntu/web/benchmark`. **Note:** the audio playback harness needs BlackHole virtual devices (macOS-only) — on this Linux host the UI loads and the bundled fixtures in `out/` are browsable, but live playback won't capture agent audio (no sound card). |
 | EDT demo (vanity URL) | https://convoai-demo.agora.io/edt | nginx 301 → `/react-video-client-luma?profile=edt`. Friendly URL for sharing. |
-| EDT demo (full URL) | https://convoai-demo.agora.io/react-video-client-luma?profile=edt | react-video-client-luma client from the [rishi_edt](https://github.com/BenWeekes/rishi_edt) fork. Gemini Live MLLM (`Aoede` voice) + generic (LemonSlice) avatar — `EDT_AVATAR_ID` points at `/assets/EDT_avatar.png`. Lives in `/home/ubuntu/rishi_edt/agent-samples/react-video-client-luma`. Uses the shared simple-backend (`EDT_*` env vars). 3 min call cap. |
+| EDT demo (full URL) | https://convoai-demo.agora.io/react-video-client-luma?profile=edt | react-video-client-luma client from the [rishi_edt](https://github.com/BenWeekes/rishi_edt) fork. Gemini Live MLLM (`Aoede` voice) + generic (LemonSlice) avatar. **Avatar pinned to `/assets/EDT_avatar_option2.png` (RGBA, alpha channel)** with `EDT_AVATAR_BACKGROUND_COLOR=#006400` for chroma-keyed transparency. 3D scene loads the real Draco-compressed `/assets/Grey_AF_draco.glb` (12.7 MB, served via symlink into `/home/ubuntu/agent-samples/assets/`). Lives in `/home/ubuntu/rishi_edt/agent-samples/react-video-client-luma`. Uses the shared simple-backend (`EDT_*` env vars). 3 min call cap. |
+| Live News (Leila) | https://convoai-demo.agora.io/news | Shared-channel viewer demo — LemonSlice Leila reads rolling headlines + trending X posts via Agora's `/speak` REST endpoint, **never** via the LLM pipeline (viewers don't publish a mic track). Multiple viewers can subscribe to the same channel; first joiner starts the agent + reader thread, last leaver tears them down. URL params: `?channel=<name>` (default `news-default`) + `?profile=<profile>` (default `news`). 5 s gap between items. Sources, round-robin interleaved: BBC World, The Guardian, NPR, Al Jazeera, Hacker News (top), The Verge, TechCrunch, Ars Technica, and X handles (@BBCBreaking, @Reuters, @TheVerge, @sama, @karpathy) gated by like-count floor. NEWS profile = cascading **OpenAI gpt-4o-mini + ElevenLabs `eleven_flash_v2_5` voice `cgSgspJ2msm6clMCkdW9` + generic LemonSlice** (Gemini Live's MLLM-bundled TTS swap was tried first but cascading is what's live). Static viewer at `/home/ubuntu/web/news/index.html`; backend endpoints `/simple-backend/news/{join,heartbeat,leave,status}` in `core/news_channel.py`, feed aggregator in `core/news_feed.py`. Adopts an existing ConvoAI agent on `TaskConflict` so a backend restart doesn't kill the channel for viewers still subscribed. |
+| Leslie (LES) photo demo | https://convoai-demo.agora.io/photo?profile=LES | Cascading photo profile dedicated to a personal-memorial avatar — OpenAI gpt-4o-mini + ElevenLabs `eleven_flash_v2_5` voice **`Nmd04QDxMhcTd5ocBsuE`** at `LES_ELEVENLABS_SPEED=0.85` (slow) + LemonSlice generic. Prompt teaches the model that it is Leslie Bernard Weekes (1945–2025) with the family context. Isolated gallery at `/uploads/LES/`; uploads via `/photo/upload?profile=LES` write there. LES is in the gallery's `CASCADING_PROFILES` allowlist so per-photo sidecars send `voice_id_elevenlabs` to the call. |
 
 ### URL query params
 
@@ -176,6 +178,17 @@ location ^~ /react-video-client-luma {
 
 # /edt — vanity URL → react-video-client-luma with the edt profile.
 location = /edt { return 301 /react-video-client-luma?profile=edt; }
+
+# /news — Live News demo, static viewer that subscribes to a ConvoAI agent
+# (Leila avatar). Channel lifecycle + /speak loop live in simple-backend.
+# ^~ so the regex cache-asset block doesn't steal the .html/.js/.css.
+location = /news { return 301 /news/; }
+location ^~ /news/ {
+    alias /home/ubuntu/web/news/;
+    index index.html;
+    try_files $uri $uri/ /news/index.html;
+    add_header Cache-Control "no-store" always;
+}
 ```
 
 Also bumped server-wide `client_max_body_size` from `10M` to `20M` to allow phone-camera JPEG uploads (backend caps at 15 MB).
@@ -247,6 +260,10 @@ Additional per-persona profiles live in `.env` as `{PROFILE}_*` env vars. Each i
 | EVENTDEMO | photo-avatar | Same as PHOTO_GEMINI but **no time limit** (`MAX_CALL_DURATION_SECONDS=0`, `IDLE_TIMEOUT=86400`). Use for stage/kiosk demos. |
 | EVENTTRU | photo-avatar | Same as EVENTDEMO + Trulience co-branding (header logo). 3 min cap. Env-pinned default avatar via `EVENTTRU_AVATAR_ID`. |
 | EDT | react-video-client-luma | Gemini Live (`Aoede`) + generic (LemonSlice) avatar. Used by the [rishi_edt](https://github.com/BenWeekes/rishi_edt) demo. Vanity URL `/edt`, full URL `/react-video-client-luma?profile=edt`. Static avatar PNG at `/assets/EDT_avatar.png` (symlinked from `rishi_edt/.../react-video-client-luma/public/assets/EDT_avatar.png`). 3 min cap. The `EDT_*` env vars are read in **strict** mode — the rishi_edt fork has no `VIDEO_*` fallback for unknown profiles, so every key in the example block has to be set. |
+| NEWS | /news viewer | **Cascading** OpenAI gpt-4o-mini + ElevenLabs `eleven_flash_v2_5` (voice `cgSgspJ2msm6clMCkdW9`) + generic (LemonSlice) avatar (defaults to an EVENTDEMO photo). Used by the `/news` shared-channel demo. No call cap (`MAX_CALL_DURATION_SECONDS=0`, `IDLE_TIMEOUT=86400`) — the channel state in `core/news_channel.py` controls lifecycle: first viewer to `POST /news/join` spins the agent + reader, last viewer to `/news/leave` (or last to time out after 60 s without a heartbeat) hangs it back up. Reader pulls 8 RSS / HN sources + 5 X handles, round-robin interleaved, dedup'd per-channel with a 5 min reread cooldown so quiet news days still fill. Speech goes through Agora's `/speak` REST endpoint only — viewers never publish a mic track and the prompt tells the LLM to stay silent, so it never speaks on its own. |
+| LES | photo-avatar | Cascading photo profile dedicated to a personal-memorial avatar. ElevenLabs voice **`Nmd04QDxMhcTd5ocBsuE`** at `LES_ELEVENLABS_SPEED=0.85` (a noticeable slowdown — uses the new generic `ELEVENLABS_SPEED` knob in `core/agent.py`/`config.py`). Prompt gives the model Leslie Bernard Weekes's biography. LES is in the gallery's `CASCADING_PROFILES` allowlist so the per-photo sidecar's `voice_id_elevenlabs` is what reaches ConvoAI; sidecars can be hand-edited to pin a voice across uploads. Isolated gallery at `/uploads/LES/`. |
+| EVENTDEMO (updated) | photo-avatar | (Existing.) Prompt rewritten to teach the model that it's a brand-new avatar just brought to life from a single photo and that it should lean into excited interjections like "ooooh" / "wahooooo" to drive body animation. 40-word cap. Greeting changed to `Wahoooo! You just brought me to life. Hi there — how's it going?`. **`EVENTDEMO_AVATAR_ASPECT_RATIO=1x1`** now passes through as `aspect_ratio: "1x1"` in the LemonSlice avatar params — uses the new generic `AVATAR_ASPECT_RATIO` knob. |
+| EDT (updated) | react-video-client-luma | (Existing.) **`EDT_AVATAR_BACKGROUND_COLOR=#006400` now actually reaches LemonSlice** (was being read by `.env` but not whitelisted in `core/config.py` — fixed via the new generic `AVATAR_BACKGROUND_COLOR` knob in `core/agent.py`/`config.py`). Avatar swapped to `EDT_avatar_option2.png` (RGBA — has the alpha needed for chroma-keyed transparency; previous file was RGB-only). |
 
 #### Photo upload pipeline
 
