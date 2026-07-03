@@ -24,6 +24,8 @@ function formatSlug(slug: string): string {
   return `${y}-${mo}-${d}  ${h}:${mi}:${s} UTC`
 }
 
+const MAX_RECORD_MS = 30_000
+
 function VoicePickerInner() {
   const router = useRouter()
   const params = useSearchParams()
@@ -38,6 +40,7 @@ function VoicePickerInner() {
 
   // Recording state
   const [recording, setRecording] = useState(false)
+  const [elapsedMs, setElapsedMs] = useState(0)
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null)
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null)
   const [recordedDurationMs, setRecordedDurationMs] = useState<number>(0)
@@ -45,6 +48,8 @@ function VoicePickerInner() {
   const recorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<BlobPart[]>([])
   const recordStartRef = useRef<number>(0)
+  const autostopRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [nowLabel, setNowLabel] = useState<string>("")
 
   useEffect(() => {
@@ -98,6 +103,17 @@ function VoicePickerInner() {
     router.push(`/?${q.toString()}`)
   }
 
+  const clearTimers = () => {
+    if (autostopRef.current) {
+      clearTimeout(autostopRef.current)
+      autostopRef.current = null
+    }
+    if (tickRef.current) {
+      clearInterval(tickRef.current)
+      tickRef.current = null
+    }
+  }
+
   const startRecording = async () => {
     setError(null)
     try {
@@ -114,26 +130,61 @@ function VoicePickerInner() {
         if (e.data.size > 0) chunksRef.current.push(e.data)
       }
       rec.onstop = () => {
+        clearTimers()
         const blob = new Blob(chunksRef.current, { type: rec.mimeType || "audio/webm" })
         setRecordedBlob(blob)
         setRecordedUrl(URL.createObjectURL(blob))
         setRecordedDurationMs(Date.now() - recordStartRef.current)
+        setElapsedMs(0)
         stream.getTracks().forEach((t) => t.stop())
       }
       recorderRef.current = rec
       recordStartRef.current = Date.now()
+      setElapsedMs(0)
       rec.start()
       setRecording(true)
+      // Auto-stop at MAX_RECORD_MS so we don't over-consume Gradium clone
+      // input and so the UI can't run past the visible cap.
+      autostopRef.current = setTimeout(() => {
+        if (recorderRef.current?.state === "recording") {
+          recorderRef.current.stop()
+        }
+        recorderRef.current = null
+        setRecording(false)
+      }, MAX_RECORD_MS)
+      // 100 ms tick keeps the countdown label live enough to feel accurate
+      // without floating point jitter — MediaRecorder itself doesn't publish
+      // an elapsed-time event.
+      tickRef.current = setInterval(() => {
+        const ms = Date.now() - recordStartRef.current
+        setElapsedMs(Math.min(ms, MAX_RECORD_MS))
+      }, 100)
     } catch (e) {
       setError(`Microphone access failed: ${(e as Error).message}`)
     }
   }
 
   const stopRecording = () => {
-    recorderRef.current?.stop()
+    // If the auto-stop fired first, the recorder is already null — bail so
+    // we don't call stop() twice.
+    if (recorderRef.current?.state === "recording") {
+      recorderRef.current.stop()
+    }
     recorderRef.current = null
     setRecording(false)
+    clearTimers()
   }
+
+  // Cleanup: cancel timers + release stream if the user navigates away
+  // mid-record. Without this the mic light stays on until GC.
+  useEffect(() => {
+    return () => {
+      clearTimers()
+      if (recorderRef.current?.state === "recording") {
+        recorderRef.current.stop()
+      }
+    }
+  }, [])
 
   const resetRecording = () => {
     if (recordedUrl) URL.revokeObjectURL(recordedUrl)
@@ -189,9 +240,9 @@ function VoicePickerInner() {
             <span className="text-xs text-white/50 font-mono">{nowLabel}</span>
           </div>
           <p className="text-xs text-white/60">
-            Speak naturally for ~5-10 seconds — the clone quality is best on
-            a clean, single-speaker sample. Your recording is stored so it
-            can be selected later.
+            Speak naturally for 5-30 seconds — the clone quality is best on
+            a clean, single-speaker sample. Recording auto-stops at 30 s.
+            Your recording is stored so it can be selected later.
           </p>
           {!recordedBlob && !recording && (
             <button
@@ -202,12 +253,21 @@ function VoicePickerInner() {
             </button>
           )}
           {recording && (
-            <button
-              onClick={stopRecording}
-              className="w-full rounded-lg bg-white text-black py-3 font-medium animate-pulse"
-            >
-              ■ Stop
-            </button>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={stopRecording}
+                className="w-full rounded-lg bg-white text-black py-3 font-medium animate-pulse"
+              >
+                ■ Stop ({(elapsedMs / 1000).toFixed(1)} s / {MAX_RECORD_MS / 1000} s)
+              </button>
+              {/* Countdown bar — fills toward the 30 s cap. */}
+              <div className="w-full h-1.5 rounded bg-white/10 overflow-hidden">
+                <div
+                  className="h-full bg-red-400 transition-[width] duration-100"
+                  style={{ width: `${Math.min(100, (elapsedMs / MAX_RECORD_MS) * 100)}%` }}
+                />
+              </div>
+            </div>
           )}
           {recordedBlob && recordedUrl && (
             <div className="flex flex-col gap-2">
