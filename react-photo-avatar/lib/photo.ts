@@ -114,6 +114,70 @@ export async function listPhotos(
   return (await res.json()) as PhotoMeta[]
 }
 
+// Voice clone sidecar — mirrors PhotoMeta shape but keyed by datetime slug.
+export type VoiceMeta = {
+  id: string                    // datetime slug "YYYY-MM-DD-HHMMSS"
+  voice_id: string              // vendor's cloned voice id
+  vendor: string                // "gradium" for now
+  created_at: number            // unix seconds
+  created_at_iso?: string
+  sample_bytes?: number
+  sample_mime?: string
+  sample_url: string            // e.g. /photo-uploads/<P>/voices/<slug>.wav
+  note?: string                 // e.g. "Please wait a bit till the voice is ready to be used."
+}
+
+// Resolve the API base URL of the served sample. `sample_url` is a
+// server-absolute path ("/photo-uploads/...") — nginx serves it directly
+// off the same host.
+export function voiceSampleUrl(meta: VoiceMeta): string {
+  return meta.sample_url.startsWith("http")
+    ? meta.sample_url
+    : `${typeof window !== "undefined" ? window.location.origin : ""}${meta.sample_url}`
+}
+
+export async function listVoices(
+  profile: string = DEFAULT_PROFILE,
+  limit = 12,
+): Promise<VoiceMeta[]> {
+  const res = await fetch(
+    `${BACKEND}/voices?profile=${encodeURIComponent(profile)}&limit=${limit}`,
+    { cache: "no-store" },
+  )
+  if (!res.ok) return []
+  return (await res.json()) as VoiceMeta[]
+}
+
+export async function submitCloneVoice(
+  profile: string,
+  audio: Blob,
+  opts: { vendor?: string; timeoutMs?: number; onProgress?: (fraction: number) => void } = {},
+): Promise<VoiceMeta> {
+  const { vendor = "gradium", timeoutMs = 90_000, onProgress } = opts
+  return new Promise<VoiceMeta>((resolve, reject) => {
+    const form = new FormData()
+    // Give the file the right extension so the backend can pick a mime.
+    const ext = /webm/i.test(audio.type) ? "webm" : /ogg/i.test(audio.type) ? "ogg" : "wav"
+    form.append("audio", audio, `sample.${ext}`)
+    const xhr = new XMLHttpRequest()
+    xhr.open(
+      "POST",
+      `${BACKEND}/clone-voice?profile=${encodeURIComponent(profile)}&vendor=${encodeURIComponent(vendor)}`,
+    )
+    xhr.timeout = timeoutMs
+    xhr.responseType = "json"
+    if (onProgress) xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total)
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300 && xhr.response) return resolve(xhr.response as VoiceMeta)
+      const err = xhr.response?.error || `HTTP ${xhr.status}`
+      reject(new Error(err))
+    }
+    xhr.onerror = () => reject(new Error("network error"))
+    xhr.ontimeout = () => reject(new Error("timeout"))
+    xhr.send(form)
+  })
+}
+
 // Profiles whose avatar always presents as female (Anam asset is female).
 // We force the persona's sex to "female" regardless of the photo's detected
 // sex so the model picks a female voice consistently.
@@ -210,16 +274,20 @@ function pickGradiumVoice(sex: PhotoMeta["sex"]): string {
 export function avatarTalkUrl(
   meta: PhotoMeta,
   profile: string = DEFAULT_PROFILE,
+  opts: { voiceIdOverride?: string; audiopick?: string } = {},
 ): string {
   const params = new URLSearchParams({ profile })
   const fixedAvatar = FIXED_AVATAR_PROFILES.has(profile)
   if (!fixedAvatar && meta.image_url) params.set("avatar_id", meta.image_url)
   if (!fixedAvatar) {
-    const voiceForProfile = GRADIUM_PROFILES.has(profile)
-      ? pickGradiumVoice(meta.sex)
-      : CASCADING_PROFILES.has(profile)
-        ? meta.voice_id || undefined
-        : meta.voice_id_gemini || meta.voice_id || undefined
+    // Explicit override (voice picker resolved a clone) always wins,
+    // otherwise fall through the existing per-profile fallback chain.
+    const voiceForProfile = opts.voiceIdOverride
+      ?? (GRADIUM_PROFILES.has(profile) ? pickGradiumVoice(meta.sex) : undefined)
+      ?? (CASCADING_PROFILES.has(profile) ? meta.voice_id || undefined : undefined)
+      ?? meta.voice_id_gemini
+      ?? meta.voice_id
+      ?? undefined
     if (voiceForProfile) params.set("voice_id", voiceForProfile)
   }
   // Persona prompt baked with detected age + sex + accent-change permission
@@ -228,6 +296,9 @@ export function avatarTalkUrl(
   params.set("autoconnect", "true")
   const returnQuery = new URLSearchParams({ profile })
   if (meta.id) returnQuery.set("selected", meta.id)
+  // Preserve audiopick so a hangup drops the user back into the same
+  // voice-picker flow instead of the default gallery.
+  if (opts.audiopick) returnQuery.set("audiopick", opts.audiopick)
   const returnUrl = `${PHOTO_BASE || "/"}?${returnQuery.toString()}`
   params.set("returnurl", returnUrl)
   return `${AVATAR_APP}?${params.toString()}`

@@ -13,6 +13,7 @@ function UploadPageInner() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const profile = normalizeProfile(searchParams.get("profile"))
+  const audiopick = searchParams.get("audiopick") ?? ""
 
   const fileRef = useRef<HTMLInputElement | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
@@ -44,6 +45,7 @@ function UploadPageInner() {
       const q = new URLSearchParams()
       if (profile !== DEFAULT_PROFILE) q.set("profile", profile)
       q.set("selected", meta.id)
+      if (audiopick) q.set("audiopick", audiopick)
       router.push(`/?${q.toString()}`)
     } catch (err) {
       setError((err as Error).message || "upload failed")

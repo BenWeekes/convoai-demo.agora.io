@@ -17,6 +17,10 @@ function HomePageInner() {
   const params = useSearchParams()
   const profile = normalizeProfile(params.get("profile"))
   const initialSelected = params.get("selected") ?? null
+  // Presence of ?audiopick=<vendor> flips the Talk CTA to route through
+  // the voice picker (record new / pick previous / skip) instead of
+  // dropping straight into the avatar call with a stock voice.
+  const audiopick = params.get("audiopick") ?? ""
 
   const [photos, setPhotos] = useState<PhotoMeta[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(initialSelected)
@@ -46,10 +50,13 @@ function HomePageInner() {
   }, [photos, selectedId])
 
   const hasAny = photos.length > 0
-  const uploadHref =
-    profile === DEFAULT_PROFILE
-      ? "/upload"
-      : `/upload?profile=${encodeURIComponent(profile)}`
+  const uploadHref = (() => {
+    const q = new URLSearchParams()
+    if (profile !== DEFAULT_PROFILE) q.set("profile", profile)
+    if (audiopick) q.set("audiopick", audiopick)
+    const qs = q.toString()
+    return qs ? `/upload?${qs}` : "/upload"
+  })()
 
   // The curated seed photo (is_default:true) is shared across empty profiles
   // and isn't actually in this profile's directory, so deletion is a no-op
@@ -131,12 +138,21 @@ function HomePageInner() {
             {/* Action buttons — single row of three to save vertical space */}
             <div className="w-full grid grid-cols-3 gap-2 mt-1">
               {selected ? (
-                <a
-                  href={avatarTalkUrl(selected, profile)}
-                  className="rounded-2xl bg-white text-black py-4 text-center text-sm sm:text-base font-semibold active:scale-[0.98] transition-transform"
-                >
-                  💬 Talk
-                </a>
+                audiopick ? (
+                  <Link
+                    href={`/voice-picker?profile=${encodeURIComponent(profile)}&photo_id=${encodeURIComponent(selected.id ?? "")}&audiopick=${encodeURIComponent(audiopick)}`}
+                    className="rounded-2xl bg-white text-black py-4 text-center text-sm sm:text-base font-semibold active:scale-[0.98] transition-transform"
+                  >
+                    🎤 Pick voice
+                  </Link>
+                ) : (
+                  <a
+                    href={avatarTalkUrl(selected, profile)}
+                    className="rounded-2xl bg-white text-black py-4 text-center text-sm sm:text-base font-semibold active:scale-[0.98] transition-transform"
+                  >
+                    💬 Talk
+                  </a>
+                )
               ) : (
                 <div />
               )}
