@@ -5,6 +5,10 @@ import Link from "next/link"
 const AGORA_LOGO =
   "https://cdn.prod.website-files.com/660affa848e8af81bdd03909/66ab7f671fb90c022fb7f1dc_Agora%20Logo%20Crisp-p-500.png"
 
+// Prefix for locally-served assets under the app's basePath. Empty in
+// dev, "/photo" in prod. Matches the same env used by next.config.ts.
+const BASE = process.env.NEXT_PUBLIC_BASE_PATH || ""
+
 // Per-profile co-branding. Add more entries here to pin a partner logo
 // alongside the Agora one for a specific profile (e.g. partner demo).
 const PARTNER_LOGOS: Record<string, { src: string; alt: string }> = {
@@ -12,6 +16,13 @@ const PARTNER_LOGOS: Record<string, { src: string; alt: string }> = {
     // Icon from trulience.com's nav bar.
     src: "https://www.trulience.com/react/trulience-2.png",
     alt: "Trulience",
+  },
+  GRADIUMDEMO: {
+    // Local copy of https://mintcdn.com/gradium/.../logo/dark.svg — the
+    // Mintlify CDN URL is signed and could rotate, so we self-host to
+    // keep the demo stable.
+    src: `${BASE}/partner/gradium.svg`,
+    alt: "Gradium",
   },
 }
 
