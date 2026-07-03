@@ -92,7 +92,11 @@ function VoicePickerInner() {
   const goTalk = (voiceIdOverride?: string) => {
     if (!photo) return
     const url = avatarTalkUrl(photo, profile, { voiceIdOverride, audiopick })
-    router.push(url)
+    // Hard nav — /photo-call is a sibling Next.js app under a different
+    // basePath. router.push would prefix /photo (this app's basePath)
+    // and produce /photo/photo-call → 404. window.location keeps the
+    // URL verbatim, matching how the gallery <a href=…> already does it.
+    window.location.href = url
   }
 
   const backToGallery = () => {
