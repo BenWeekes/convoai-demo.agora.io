@@ -119,10 +119,22 @@ export async function listPhotos(
 // sex so the model picks a female voice consistently.
 const FEMALE_AVATAR_PROFILES = new Set(["EVENTANAM", "EVENTANAMGRADIUM"])
 
+// Profiles that use a fixed event/demo script instead of the
+// photo-derived persona composition. Bypass the sex/age builder and
+// hand the model a self-contained prompt.
+const FIXED_PROMPT: Record<string, string> = {
+  GRADIUMDEMO:
+    "You are a talking avatar at Raise AI summit running Gradium TTS " +
+    "and Agora ConvoAI for high quality, low latency voice interactions. " +
+    "Keep responses between 10 to 20 words and try and make people laugh.",
+}
+
 function buildPersonaPrompt(
   meta: PhotoMeta,
   profile: string = DEFAULT_PROFILE,
 ): string {
+  const fixed = FIXED_PROMPT[profile]
+  if (fixed) return fixed
   const age =
     meta.age_bucket === "young"
       ? "young"
