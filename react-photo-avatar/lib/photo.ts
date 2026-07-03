@@ -176,6 +176,25 @@ const CASCADING_PROFILES = new Set(["PHOTO", "LES"])
 // gallery photo still drives the persona prompt (sex / age detection).
 const FIXED_AVATAR_PROFILES = new Set(["EVENTANAM", "EVENTANAMGRADIUM"])
 
+// Profiles that pass a stock Gradium voice_id picked from meta.sex. The
+// backend's gradium branch already accepts voice_id as a query-param
+// override, so we just resolve the ID client-side and pipe it through.
+// Adding a profile here is enough to route it through pickGradiumVoice()
+// — no schema change.
+const GRADIUM_PROFILES = new Set(["GRADIUMDEMO"])
+
+const GRADIUM_STOCK_VOICES = {
+  male:   "_6Aslh2DxfmnRLmP",
+  female: "cLONiZ4hQ8VpQ4Sz",
+} as const
+const GRADIUM_DEFAULT_VOICE = GRADIUM_STOCK_VOICES.male
+
+function pickGradiumVoice(sex: PhotoMeta["sex"]): string {
+  return sex === "male" || sex === "female"
+    ? GRADIUM_STOCK_VOICES[sex]
+    : GRADIUM_DEFAULT_VOICE
+}
+
 export function avatarTalkUrl(
   meta: PhotoMeta,
   profile: string = DEFAULT_PROFILE,
@@ -184,9 +203,11 @@ export function avatarTalkUrl(
   const fixedAvatar = FIXED_AVATAR_PROFILES.has(profile)
   if (!fixedAvatar && meta.image_url) params.set("avatar_id", meta.image_url)
   if (!fixedAvatar) {
-    const voiceForProfile = CASCADING_PROFILES.has(profile)
-      ? meta.voice_id || undefined
-      : meta.voice_id_gemini || meta.voice_id || undefined
+    const voiceForProfile = GRADIUM_PROFILES.has(profile)
+      ? pickGradiumVoice(meta.sex)
+      : CASCADING_PROFILES.has(profile)
+        ? meta.voice_id || undefined
+        : meta.voice_id_gemini || meta.voice_id || undefined
     if (voiceForProfile) params.set("voice_id", voiceForProfile)
   }
   // Persona prompt baked with detected age + sex + accent-change permission
