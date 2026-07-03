@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/PageHeader"
 import {
   avatarTalkUrl,
   DEFAULT_PROFILE,
+  deleteVoice,
   getPhoto,
   listVoices,
   normalizeProfile,
@@ -216,6 +217,34 @@ function VoicePickerInner() {
   const secs = useMemo(() => Math.round(recordedDurationMs / 100) / 10, [recordedDurationMs])
   const gridEmpty = voices.length === 0
 
+  // Two-click delete: first click on a card arms it (its "×" flips to a
+  // red "Delete?" for 4 s). Second click within that window commits.
+  // Matches the confirm pattern the photo gallery uses.
+  const [armedDelete, setArmedDelete] = useState<string | null>(null)
+  const [deletingSlug, setDeletingSlug] = useState<string | null>(null)
+  const armTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => {
+    if (armTimerRef.current) clearTimeout(armTimerRef.current)
+  }, [])
+  const onDeleteClick = async (slug: string) => {
+    if (armedDelete !== slug) {
+      setArmedDelete(slug)
+      if (armTimerRef.current) clearTimeout(armTimerRef.current)
+      armTimerRef.current = setTimeout(() => setArmedDelete(null), 4000)
+      return
+    }
+    if (armTimerRef.current) {
+      clearTimeout(armTimerRef.current)
+      armTimerRef.current = null
+    }
+    setArmedDelete(null)
+    setDeletingSlug(slug)
+    const ok = await deleteVoice(slug, profile)
+    setDeletingSlug(null)
+    if (ok) setVoices((prev) => prev.filter((v) => v.id !== slug))
+    else setError(`Failed to delete ${slug}`)
+  }
+
   return (
     <div className="min-h-screen flex flex-col bg-black text-white">
       <PageHeader profile={profile} />
@@ -307,28 +336,48 @@ function VoicePickerInner() {
           )}
           {voices.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {voices.map((v) => (
-                <div
-                  key={v.id}
-                  className="rounded-lg border border-white/15 bg-white/5 p-3 flex flex-col gap-2"
-                >
-                  <p className="text-xs text-white/70 font-mono leading-tight">
-                    {formatSlug(v.id)}
-                  </p>
-                  <audio
-                    src={voiceSampleUrl(v)}
-                    controls
-                    className="w-full h-8"
-                    preload="none"
-                  />
-                  <button
-                    onClick={() => goTalk(v.voice_id)}
-                    className="rounded-md bg-white text-black py-1.5 text-sm font-medium hover:bg-white/80"
+              {voices.map((v) => {
+                const armed = armedDelete === v.id
+                const deleting = deletingSlug === v.id
+                return (
+                  <div
+                    key={v.id}
+                    className="relative rounded-lg border border-white/15 bg-white/5 p-3 flex flex-col gap-2"
                   >
-                    Use this voice
-                  </button>
-                </div>
-              ))}
+                    {/* Two-click delete button in the top-right corner. */}
+                    <button
+                      onClick={() => onDeleteClick(v.id)}
+                      disabled={deleting}
+                      title={armed ? "Confirm delete" : "Delete this clone"}
+                      className={
+                        "absolute -top-2 -right-2 w-7 h-7 rounded-full text-xs font-medium " +
+                        "flex items-center justify-center shadow-md transition-colors " +
+                        (armed
+                          ? "bg-red-500 text-white hover:bg-red-400"
+                          : "bg-white/15 text-white/70 hover:bg-white/25")
+                      }
+                    >
+                      {deleting ? "…" : armed ? "✓" : "×"}
+                    </button>
+                    <p className="text-xs text-white/70 font-mono leading-tight">
+                      {formatSlug(v.id)}
+                    </p>
+                    <audio
+                      src={voiceSampleUrl(v)}
+                      controls
+                      className="w-full h-8"
+                      preload="none"
+                    />
+                    <button
+                      onClick={() => goTalk(v.voice_id)}
+                      disabled={deleting}
+                      className="rounded-md bg-white text-black py-1.5 text-sm font-medium hover:bg-white/80 disabled:opacity-40"
+                    >
+                      Use this voice
+                    </button>
+                  </div>
+                )
+              })}
             </div>
           )}
         </section>

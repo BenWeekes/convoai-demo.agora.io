@@ -148,6 +148,17 @@ export async function listVoices(
   return (await res.json()) as VoiceMeta[]
 }
 
+export async function deleteVoice(
+  slug: string,
+  profile: string = DEFAULT_PROFILE,
+): Promise<boolean> {
+  const res = await fetch(
+    `${BACKEND}/voice/${encodeURIComponent(slug)}?profile=${encodeURIComponent(profile)}`,
+    { method: "DELETE" },
+  )
+  return res.ok || res.status === 404
+}
+
 export async function submitCloneVoice(
   profile: string,
   audio: Blob,
