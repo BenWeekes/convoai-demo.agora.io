@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "Agora Photo Avatar",
+  title: "Avatar Creator",
   description: "Snap a photo, talk to your avatar — powered by Agora ConvoAI",
 }
 
