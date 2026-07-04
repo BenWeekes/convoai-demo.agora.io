@@ -11,7 +11,10 @@ const BASE = process.env.NEXT_PUBLIC_BASE_PATH || ""
 
 // Per-profile co-branding. Add more entries here to pin a partner logo
 // alongside the Agora one for a specific profile (e.g. partner demo).
-type PartnerLogo = { src: string; alt: string }
+// `heightClass` shrinks the partner box relative to the Agora one when
+// the partner asset is edge-to-edge (no built-in padding) and would
+// otherwise read visually taller. Omit to match Agora's h-8.
+type PartnerLogo = { src: string; alt: string; heightClass?: string }
 const PARTNER_LOGOS: Record<string, PartnerLogo> = {
   EVENTTRU: {
     // Icon from trulience.com's nav bar.
@@ -24,25 +27,23 @@ const PARTNER_LOGOS: Record<string, PartnerLogo> = {
     // keep the demo stable.
     src: `${BASE}/partner/gradium.svg`,
     alt: "Gradium",
+    // Agora logo box is h-8 (32 px); 30 % reduction → ~22 px.
+    heightClass: "h-[22px]",
   },
 }
 
-// Both logos are boxed to the same fixed height in their own containers
-// with object-contain, so images with different bundled padding (Agora
-// PNG has whitespace baked in; Gradium SVG is edge-to-edge) render at
-// the same visible cap height without needing per-partner overrides.
-const LOGO_BOX = "h-8 w-auto flex items-center"
+const AGORA_BOX = "h-8 w-auto flex items-center"
 
 export function PageHeader({ profile }: { profile?: string }) {
   const partner = profile ? PARTNER_LOGOS[profile] : undefined
   return (
     <header className="w-full border-b border-white/10 px-4 py-3 flex items-center justify-center gap-6">
-      <Link href="/" className={LOGO_BOX}>
+      <Link href="/" className={AGORA_BOX}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={AGORA_LOGO} alt="Agora" className="h-full w-auto object-contain" />
       </Link>
       {partner && (
-        <div className={LOGO_BOX}>
+        <div className={`${partner.heightClass || "h-8"} w-auto flex items-center`}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={partner.src}
