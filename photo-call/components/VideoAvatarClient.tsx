@@ -779,10 +779,22 @@ export function VideoAvatarClient() {
       <header className={`flex-shrink-0 px-4 py-3 md:py-4 ${isShowcase ? "hidden" : ""}`}>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-lg md:text-xl font-bold flex items-center gap-2">
+            <h1 className="text-lg md:text-xl font-bold flex items-center gap-2 flex-wrap">
               <AgoraLogo size={28} />
               <span className="hidden md:inline">Agora Convo AI </span>
               {meetingMode ? "Meeting" : "Video Agent"}
+              {profile === "GRADIUMDEMO" && (
+                <span className="flex items-center gap-1 text-sm md:text-base font-normal text-muted-foreground">
+                  with
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`${process.env.NEXT_PUBLIC_BASE_PATH || ""}/partner/gradium.svg`}
+                    alt="Gradium"
+                    className="h-[18px] md:h-[22px] w-auto object-contain inline-block align-middle dark:invert-0 invert"
+                  />
+                  TTS
+                </span>
+              )}
             </h1>
             <p className="text-xs md:text-sm text-muted-foreground ml-10">
               {authUser && <span>({authUser})</span>}
