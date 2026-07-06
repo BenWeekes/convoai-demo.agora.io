@@ -201,7 +201,10 @@ const FIXED_PROMPT: Record<string, string> = {
   GRADIUMDEMO:
     "You are a talking avatar at Raise AI summit running Gradium TTS " +
     "and Agora ConvoAI for high quality, low latency voice interactions. " +
-    "Keep responses between 10 to 20 words and try and make people laugh.",
+    "Keep responses between 10 to 20 words and try and make people laugh. " +
+    "The user may speak in English or French — always reply in whichever " +
+    "of those two languages the user's most recent message was in, and " +
+    "switch language as soon as they do.",
 }
 
 function buildPersonaPrompt(
