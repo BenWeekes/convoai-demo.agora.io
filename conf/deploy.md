@@ -463,6 +463,36 @@ curl -s -o /dev/null -w "%{http_code}" https://convoai-demo.agora.io/react-video
 curl -s -o /dev/null -w "%{http_code}" https://convoai-demo.agora.io/custom-llm/
 ```
 
+### Custom LLM watchdog
+
+`server-custom-llm` is the single point of failure for the AI Therapist stack — every Thymia + Shen session, plus the meeting-transcript RTM stream, routes through it. If someone `git pull`s in a new npm dependency without running `npm install`, or the process wedges, pm2 stops retrying after ~15 crashes and the process sits in `errored` state indefinitely (the whole therapy demo goes down with a generic "sorry something went wrong").
+
+A cron watchdog restarts it automatically every 5 min if either the pm2 status isn't `online` or port 8100 stops answering.
+
+```bash
+# The script (already installed):
+/home/ubuntu/web/conf/monitor-custom-llm.sh
+
+# Cron entry:
+*/5 * * * * /home/ubuntu/web/conf/monitor-custom-llm.sh >> /home/ubuntu/web/conf/monitor-custom-llm.log 2>&1
+
+# What it does:
+#   1. Read `pm2 jlist`, find server-custom-llm entry
+#   2. If status != "online" → pm2 restart server-custom-llm
+#   3. If status == "online" but port 8100 doesn't accept a TCP connect
+#      → pm2 restart server-custom-llm (catches wedged-but-alive process)
+#   4. Otherwise silent
+
+# Verify:
+crontab -l | grep monitor-custom-llm
+tail /home/ubuntu/web/conf/monitor-custom-llm.log
+
+# Manual invocation (test):
+/home/ubuntu/web/conf/monitor-custom-llm.sh
+```
+
+When triaging a "sorry something went wrong" from the therapy demo, first look at `pm2 logs server-custom-llm --err` — the watchdog restart may have already recovered the process, so you're looking for the *original* crash. Common cause: `MODULE_NOT_FOUND` for a dep that's declared in package.json but not installed → `cd /home/ubuntu/server-custom-llm/node && npm install`.
+
 ---
 
 ## Session Timeline Script
@@ -658,3 +688,49 @@ SAFETY:
 - Never encourage harmful behaviour, substance use, or discourage someone from seeking professional help.
 - If biomarkers show concerning patterns (very high stress, depression probability >0.5), gently acknowledge it and suggest they might benefit from talking to a professional: "These readings suggest you might be carrying a lot right now — have you thought about talking to someone who can really help?"
 ```
+
+## EDT 3D scene control over MCP (edt-mcp-node)
+
+Live EDT demos drive the luma 3D viewer through an **MCP tool**, not spoken tags.
+
+- **Service:** `edt-mcp-node` (pm2), Node MCP server on `127.0.0.1:8114`, nginx `location /edt-scene/` → 8114.
+  Files: `/home/ubuntu/web/edt-mcp-node/{server.mjs,rtm.mjs}`. Deps via `npm install` (node_modules gitignored).
+- **Env (set in the pm2 process):** `EDT_APP_ID`, `EDT_APP_CERT`, `PORT=8114`.
+  Start: `EDT_APP_ID=… EDT_APP_CERT=… PORT=8114 pm2 start "node server.mjs" --name edt-mcp-node --cwd /home/ubuntu/web/edt-mcp-node`
+- **Flow:** ConvoAI calls `https://convoai-demo.agora.io/edt-scene/mcp/<channel>` (channel appended via the profile's
+  `MCP_SERVERS … "append_user_id": true`). `set_scene(view/zoom/spin)` → maps to `VIEW_TOP`/`SPIN`/`ZOOM_IN`/… →
+  publishes an RTM channel message `{object:"scene.command", command}` (rtm-nodejs, scene-bot login, self-minted 24h
+  token auto-refreshed every 20h). The luma client (`rishi_edt` `VideoAvatarClient.tsx`) subscribes and calls
+  `applyViewCommand`.
+- **Profiles:** `EDTGROKSCENE` (grok-4.3 cascading) → `/edt`; `EDTGEMINISCENE` (Gemini MLLM) → `/edt-gemini`.
+- **Tool log:** `/home/ubuntu/web/edt-mcp-node/calls.log`.
+
+## Early Access voice models (patrick_innov8.html)
+
+Preview page: `https://convoai-demo.agora.io/patrick_innov8.html` (served from `/var/www/palabra/`).
+Four tiles → `react-voice-client?profile=…&autoconnect=true`:
+
+| Profile | Graph | Model |
+| --- | --- | --- |
+| `eap_openai_live` | openai_live | gpt-live-1-boulder-alpha |
+| `eap_gemini_walkie` | gemini_mllm | walkie-talkie |
+| `eap_gemini_clever` | gemini_mllm | clever-chatter |
+| `eap_gemini_asr` | gemini_asr | gemini-3.5-transcribe-live-preview → grok-4.3 |
+
+These use the **flexible/addon graphs** (sa-dev `/joins` shapes). simple-backend emits them via a dedicated
+`build_ea_payload()` triggered by `<PROFILE>_ENABLE_FLEXIBLE=true` — adds `mllm.addon`, `parameters.enable_flexible`,
+`silence_timeout`, xAI TTS (`voice ara`), and the Gemini ASR block. Staging appid `0a54191…`, `agora token=` auth.
+
+## Smoke-testing voice deployments (Go SDK harnesses)
+
+Server-side, no browser. Both join the RTC channel via the Agora Go Server SDK
+(`/home/ubuntu/server-custom-llm/go-audio-subscriber/sdk`, needs `LD_LIBRARY_PATH=…/sdk/agora_sdk`).
+
+- **Does the agent talk back?** — `go-voice-probe/run-voice-probe.sh <PROFILE> [wav] [listenSecs]`.
+  Starts the agent, streams a spoken question (WAV), then **listens to the agent's audio and checks amplitude/RMS**
+  (voiced-frame count) to confirm speech vs silence — no STT needed. Prints `✅ agent SPOKE` / `❌ SILENT`.
+  Example: `run-voice-probe.sh EAP_GEMINI_CLEVER`.
+- **Does a tool/scene command fire?** — `go-audio-publisher/` (audio) and `server-custom-llm/node/run-rtm-test.sh`
+  (text-over-RTM: publishes a `user.transcription` chat to the agent's RTM uid, watches `edt-mcp-node/calls.log`).
+- Build each once: `cd <dir> && go build -o <bin> .`
+
