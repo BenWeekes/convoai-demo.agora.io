@@ -778,3 +778,26 @@ Quick re-check command:
 ```
 curl -s --compressed "https://convoai-demo.agora.io/<path>" | grep -c 'gtm-loader.js'   # expect 1
 ```
+
+### Thymia COEP removed (so GTM/analytics tags aren't blocked)
+
+The `react-video-client-avatar-thymia` **app** (Next.js) sets `Cross-Origin-Opener-Policy`,
+`Cross-Origin-Embedder-Policy: require-corp`, `Cross-Origin-Resource-Policy` for Shen's
+`SharedArrayBuffer` WASM. **Shen is disabled**, and COEP `require-corp` blocks every
+cross-origin tag GTM loads (Google Ads, DoubleClick, Clarity, etc. →
+`ERR_BLOCKED_BY_RESPONSE.NotSameOriginAfterDefaultedToSameOriginByCoep`).
+
+Fix (nginx, no app-source edit) in the thymia location:
+```
+proxy_hide_header Cross-Origin-Embedder-Policy;
+proxy_hide_header Cross-Origin-Opener-Policy;
+proxy_hide_header Cross-Origin-Resource-Policy;
+```
+Verified headless: with COEP stripped, Thymia still initializes its WASM and joins RTC with
+**zero SharedArrayBuffer errors** — only Shen needed cross-origin isolation. **Re-add these
+headers (or use `Cross-Origin-Embedder-Policy: credentialless`) if Shen is re-enabled.**
+
+Note: GTM (`GTM-TKTWGML`) then loads its tags, but **GA4 data still depends on the container
+config** — the container carries Google Ads tags + Consent Mode (`gcs=G1--` denied) and multiple
+GA4 ids; ensure a GA4 tag with an All-Pages trigger fires for `convoai-demo.agora.io` (check in
+GTM Preview / GA4 Realtime).
