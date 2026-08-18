@@ -734,3 +734,47 @@ Server-side, no browser. Both join the RTC channel via the Agora Go Server SDK
   (text-over-RTM: publishes a `user.transcription` chat to the agent's RTM uid, watches `edt-mcp-node/calls.log`).
 - Build each once: `cd <dir> && go build -o <bin> .`
 
+
+## Google Tag Manager (GTM-TKTWGML) — site-wide, injected at nginx
+
+Analytics is injected into **every HTML page** at the nginx layer, so **no app source is
+touched** (important: `react-voice-client`, `react-video-client-avatar`,
+`react-video-client-avatar-thymia` are served straight from the **public** `agent-samples`
+clone — we must not edit/push those).
+
+- **Config:** `/etc/nginx/sites-enabled/palabra`, server-level:
+  ```
+  sub_filter_once on;
+  sub_filter_types text/html;
+  sub_filter '</head>' '<script src="/gtm-loader.js"></script></head>';
+  sub_filter '</body>' '<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-TKTWGML" …></iframe></noscript></body>';
+  ```
+- **Loader:** `/var/www/palabra/gtm-loader.js` (the standard GTM IIFE, self-hosted to avoid
+  quote-escaping in the nginx string). Container id `GTM-TKTWGML`.
+- **Why the `proxy_set_header Accept-Encoding "";`** on the app proxies (ports 8083–8089):
+  the Next.js upstreams gzip when nginx forwards `Accept-Encoding`; `sub_filter` can't rewrite
+  gzipped bytes. Forcing plain upstream responses lets sub_filter inject, then nginx re-gzips
+  for the client. Static pages need nothing extra.
+- **To change the GTM id:** edit `gtm-loader.js` (loader) + the `ns.html?id=` in the nginx
+  `sub_filter` (noscript), then `nginx -t && systemctl reload nginx`.
+
+### GTM injection — verified on live public URLs (2026-08-18)
+
+Confirmed the GTM `<script src="/gtm-loader.js">` (head) + `<noscript>` (body) are present on
+the actual demo URLs with their real query params (all HTTP 200):
+
+| URL | GTM present |
+| --- | --- |
+| `/react-video-client-avatar-thymia?autoconnect=true&returnurl=/` | ✅ |
+| `/react-voice-client?profile=PREMIUM&autoconnect=true&returnurl=/` | ✅ |
+| `/react-video-client-avatar?autoconnect=true&returnurl=/&profile=TONYW` | ✅ |
+| `/react-video-client-avatar-thymia?…&profile=FERGUS` | ✅ |
+| `/react-video-client-luma?profile=edt` | ✅ |
+| `/react-voice-client?profile=eap_gemini_clever&autoconnect=true` | ✅ |
+| `/photo`, `/photo-call`, `/dealer/voice-agent/` | ✅ |
+| `/patrick_innov8.html`, `/` (landing) | ✅ |
+
+Quick re-check command:
+```
+curl -s --compressed "https://convoai-demo.agora.io/<path>" | grep -c 'gtm-loader.js'   # expect 1
+```
