@@ -750,9 +750,36 @@ branch **`baccarat`** (off `fix/audio-diagnostics`) for casino-specific mods.
   (deps installed with `npm install --legacy-peer-deps`).
 - **URL:** `https://convoai-demo.agora.io/baccarat/?profile=baccarat_play&controllerEndpoint=wss://wvc-eu-west-2-dev-01.trulience.com`
   (avatar/endpoint/SDK default from `.env`; per-request overrides: `avatarId, endpoint, profile,
-  channel, controllerEndpoint, voice_id, prompt, greeting, kiosk, autoconnect`).
-- **Casino TODO on this branch:** player/banker side labels + on-screen balance (from `baccarat.balance`
-  RTM), and wire `avatar:content-changed {content:'deal'}` → reveal.
+  channel, controllerEndpoint, voice_id, prompt, greeting, kiosk, autoconnect, revealOffsetMs`).
+- **Landing tile:** a "Baccarat Dealer" card in `/var/www/landing/index.html` links to the URL above
+  (`…&returnurl=/`; note the client does not yet honor `returnurl`). Landing is **not** a git repo.
+
+### How the Baccarat round works (client + MCP, all on the `baccarat` branch)
+
+The LLM is deliberately **out of the deal-video path** (grok reliably *calls* the tool but was
+unreliable at echoing the `<trl-scene>` tag). Flow per hand:
+
+1. Player bets by voice → grok calls MCP `deal_hand(side, amount)` (reject re-deal within 6 s).
+2. MCP settles the hand (always-6), then **fire-and-forget** publishes two RTM object messages on
+   the channel: `baccarat.deal {param}` and `baccarat.balance {...}` (RTM login warmed at boot so the
+   first deal isn't delayed). Grok only says a short filler — it emits **no** tag or card codes.
+3. Client (`App.js`) on `baccarat.deal` calls `trulienceObj.sendMessageToAvatar('<trl-scene content="deal"
+   param="…"/>')` — **deterministic deal video**. On `baccarat.balance` it arms the reveal + shows the
+   bet on the player bar (side + `YOUR BET $X`), keeping the previous balance (no winner yet).
+4. Client attaches `avatar:content-changed` **directly on the runtime SDK object** (the react-sdk
+   `eventCallbacks` prop did not deliver it). The `deal` content event (clip start) anchors a timer:
+   at **+`revealOffsetMs` (13 s)** it sends `[reveal]` to the agent (deduped; 30 s fallback timer) so
+   grok narrates scores + winner + balance and invites the next bet. The **result on the bar** (winner
+   glow + new balance) is applied **~3.5 s after** the reveal cue so it lands just after the deciding
+   6th card (turns up ~18.3 s in), not early.
+5. Card reveal times in the clip (from clip start): pairs 12.6 / 14.6 s, Player 3rd 16.6 s, Banker 3rd
+   **18.33 s**. Player-bar balance resets on every new connect (no stale balance across reconnects).
+- **Session cap:** `BACCARAT_PLAY_MAX_CALL_DURATION_SECONDS=300` (5 min), same mechanism as other
+  profiles (`core/config.py` default is 300; simple-backend auto-hangs-up via `_schedule_max_duration_hangup`).
+- **Known:** the client makes **two** RTM connections (connect=false preload + connect=true), so channel
+  messages arrive twice — client-side dedupe (signature+time, per-cue) neutralizes it for balance/deal/reveal.
+- **Debug beacon:** client POSTs reveal/content-changed events to `…/baccarat-mcp/clientlog`
+  → `/home/ubuntu/baccarat-mcp/client.log` (browser console is too noisy to read).
 
 ## Early Access voice models (patrick_innov8.html)
 
