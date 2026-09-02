@@ -705,6 +705,55 @@ Live EDT demos drive the luma 3D viewer through an **MCP tool**, not spoken tags
 - **Profiles:** `EDTGROKSCENE` (grok-4.3 cascading) → `/edt`; `EDTGEMINISCENE` (Gemini MLLM) → `/edt-gemini`.
 - **Tool log:** `/home/ubuntu/web/edt-mcp-node/calls.log`.
 
+### baccarat-mcp — playable Baccarat dealer (MCP)
+
+A ConvoAI voice agent ("Gee Gee") deals Baccarat on the Trulience card avatar. The MCP
+tool is the source of truth for cards/winner/balance; the agent holds the result until the
+client sends `[reveal]`. Full design + test guide: `baccarat_plan.md` (this dir).
+
+- **Service:** `baccarat-mcp` (pm2), Node streamable-HTTP MCP on `127.0.0.1:8117`, nginx
+  `location /baccarat-mcp/` → 8117. Files: `/home/ubuntu/baccarat-mcp/{server.mjs,rtm.mjs,play_round.cjs}`.
+  Deps: `node_modules` symlinked to `edt-mcp-node/node_modules` (identical set).
+- **Env (set in the pm2 process):** `BACCARAT_APP_ID`, `BACCARAT_APP_CERT`, `PORT=8117`.
+  Start: `BACCARAT_APP_ID=… BACCARAT_APP_CERT=… PORT=8117 pm2 start "node server.mjs" --name baccarat-mcp --cwd /home/ubuntu/baccarat-mcp`
+- **Tools:** `deal_hand(bet_side,bet_amount)` (always-6 deal, settle, update balance,
+  publish `{object:"baccarat.balance", …}` RTM, return `deal_tag`+result), `get_balance()`,
+  `reset_game()`. Per-channel state = $100 start + shoe. ConvoAI calls
+  `https://convoai-demo.agora.io/baccarat-mcp/mcp/<channel>` (`append_user_id:true`).
+- **Profile:** `BACCARAT_PLAY` (grok-4.3 + Ares + xai/carina + `BACCARAT_PLAY_MCP_SERVERS`).
+  Base voice-only persona is `BACCARAT` (no tool). Lambda-style start:
+  `…/simple-backend/start-agent?profile=baccarat_play&connect=true` (stop: `&hangup=true&agent_id=<id>`).
+- **Test:** `/home/ubuntu/baccarat-mcp/run-play-test.sh "<bet>" [waitSec]` (RTM bet→reveal
+  + tool log); `test-mcp.mjs <chan>` (tools direct); `go-voice-probe baccarat_play` (audio).
+- **Tool log:** `/home/ubuntu/baccarat-mcp/calls.log`.
+- **Note:** agent transcripts are on the RTC data stream, not RTM — verify spoken
+  narration / reveal-hold live on the tru client (it shows the transcript).
+- **Debug LLM proxy:** `baccarat-llm-proxy` (pm2, `127.0.0.1:8118`, nginx `/baccarat-llm/`),
+  logs full grok I/O to `/home/ubuntu/baccarat-mcp/llm.log`. `BACCARAT_PLAY_LLM_URL` points
+  at it while tuning; revert to `https://api.x.ai/v1/chat/completions` when done.
+
+### baccarat-client — hosted casino web client (agora-trulience-sdk)
+
+React SPA (CRA5/craco) that renders the Trulience baccarat avatar + connects to the agent.
+Repo `github.com/BenWeekes/agora-trulience-sdk`, cloned at `/home/ubuntu/agora-trulience-sdk`,
+branch **`baccarat`** (off `fix/audio-diagnostics`) for casino-specific mods.
+
+- **Service:** `baccarat-client` (pm2, Express `server.js` on `127.0.0.1:3040`), nginx
+  `location ^~ /baccarat/` → 3040 (the `^~` beats the regex `.js/.css` cache block on line ~405;
+  a plain prefix 404s assets). `location = /baccarat` → 301 `/baccarat/`.
+- **Sub-path:** built with `homepage=/baccarat` (package.json) so assets are `/baccarat/static/*`;
+  `proxy_pass …:3040/` (trailing slash) strips the prefix for the root-serving Express app.
+- **Build-time env** (`react/.env`, gitignored, CRA inlines at build → rebuild to change):
+  `REACT_APP_AGENT_ENDPOINT=…/simple-backend/start-agent`, baccarat `APP_ID`, staging
+  `REACT_APP_TRULIENCE_SDK_URL=https://digitalhuman.uk/sdk/trulience.sdk.js`, avatar `7256750693112891460`.
+- **Rebuild:** `cd react && CI=false GENERATE_SOURCEMAP=false npm run build && pm2 restart baccarat-client`
+  (deps installed with `npm install --legacy-peer-deps`).
+- **URL:** `https://convoai-demo.agora.io/baccarat/?profile=baccarat_play&controllerEndpoint=wss://wvc-eu-west-2-dev-01.trulience.com`
+  (avatar/endpoint/SDK default from `.env`; per-request overrides: `avatarId, endpoint, profile,
+  channel, controllerEndpoint, voice_id, prompt, greeting, kiosk, autoconnect`).
+- **Casino TODO on this branch:** player/banker side labels + on-screen balance (from `baccarat.balance`
+  RTM), and wire `avatar:content-changed {content:'deal'}` → reveal.
+
 ## Early Access voice models (patrick_innov8.html)
 
 Preview page: `https://convoai-demo.agora.io/patrick_innov8.html` (served from `/var/www/palabra/`).
