@@ -712,7 +712,11 @@ tool is the source of truth for cards/winner/balance; the agent holds the result
 client sends `[reveal]`. Full design + test guide: `baccarat_plan.md` (this dir).
 
 - **Service:** `baccarat-mcp` (pm2), Node streamable-HTTP MCP on `127.0.0.1:8117`, nginx
-  `location /baccarat-mcp/` → 8117. Files: `/home/ubuntu/baccarat-mcp/{server.mjs,rtm.mjs,play_round.cjs}`.
+  `location /baccarat-mcp/` → 8117. **Source lives in THIS repo at `conf/baccarat-mcp/`**
+  (`server.mjs,rtm.mjs,play_round.cjs,llm-proxy.mjs`); `/home/ubuntu/baccarat-mcp` is a
+  **symlink** to it, so pm2's cwd and the hardcoded log paths keep working. `node_modules`
+  symlinks to `edt-mcp-node/node_modules`. Rebuild: clone this repo, symlink
+  `/home/ubuntu/baccarat-mcp → conf/baccarat-mcp`, `npm i`, then the pm2 start below.
   Deps: `node_modules` symlinked to `edt-mcp-node/node_modules` (identical set).
 - **Env (set in the pm2 process):** `BACCARAT_APP_ID`, `BACCARAT_APP_CERT`, `PORT=8117`.
   Start: `BACCARAT_APP_ID=… BACCARAT_APP_CERT=… PORT=8117 pm2 start "node server.mjs" --name baccarat-mcp --cwd /home/ubuntu/baccarat-mcp`
