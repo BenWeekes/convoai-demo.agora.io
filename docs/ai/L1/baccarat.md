@@ -9,12 +9,12 @@ the deal video and shows a Player/Banker + balance bar. Full detail: `conf/deplo
 - **Profile** `baccarat_play` in `agent-samples/simple-backend/.env` (gitignored): Grok 4.3 +
   Ares STT + xAI TTS `carina`; `TTS_SKIP_PATTERNS=5` (don't speak `{…}` tags); 5-min cap
   (`MAX_CALL_DURATION_SECONDS=300`); `MCP_SERVERS` → the dealer tool; `LLM_URL` → the debug proxy.
-- **MCP dealer** `conf/baccarat-mcp/` (this repo; symlinked to `/home/ubuntu/baccarat-mcp`,
+- **MCP dealer** `baccarat/mcp/` (this repo; symlinked to `/home/ubuntu/baccarat-mcp`,
   pm2 `baccarat-mcp`, :8117, nginx `/baccarat-mcp/`): tools `deal_hand`/`get_balance`/`reset_game`,
   per-channel `{balance,shoe}`, always-6 rules in `play_round.cjs`. On a deal it **fire-and-forget
   publishes** two RTM messages: `baccarat.deal {param}` and `baccarat.balance {…}` (RTM login warmed
   at boot). Rejects a re-deal within 6s.
-- **LLM debug proxy** `conf/baccarat-mcp/llm-proxy.mjs` (pm2 `baccarat-llm-proxy`, :8118, `/baccarat-llm/`):
+- **LLM debug proxy** `baccarat/mcp/llm-proxy.mjs` (pm2 `baccarat-llm-proxy`, :8118, `/baccarat-llm/`):
   logs full grok I/O to `client.log`/`llm.log`. `BACCARAT_PLAY_LLM_URL` points at it (revert to
   `api.x.ai` when not debugging).
 - **Client** `agora-trulience-sdk`#`baccarat` (pm2 `baccarat-client`, :3040, `/baccarat/`): on
@@ -30,7 +30,7 @@ the deal video and shows a Player/Banker + balance bar. Full detail: `conf/deplo
   timing — see the deploy.md round-flow section.
 
 ## Rebuild
-1. This repo's `conf/baccarat-mcp` → symlink `/home/ubuntu/baccarat-mcp`, `npm i`, pm2 start
+1. This repo's `baccarat/mcp` → symlink `/home/ubuntu/baccarat-mcp`, `npm i`, pm2 start
    `baccarat-mcp` (env `BACCARAT_APP_ID/CERT PORT=8117`) and `baccarat-llm-proxy` (env
    `XAI_API_KEY PORT=8118`).
 2. Clone `agora-trulience-sdk`, `git checkout baccarat`, `react/.env` (agent endpoint, staging

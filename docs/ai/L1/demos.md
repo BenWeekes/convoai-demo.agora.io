@@ -4,7 +4,7 @@ Each demo's URL, what it is, its repo, and where the detail lives.
 
 | Demo | URL | What | Source / deep dive |
 |---|---|---|---|
-| **Baccarat dealer** | `/baccarat/?profile=baccarat_play&controllerEndpoint=wss://wvc-eu-west-2-dev-01.trulience.com` | Voice-played Baccarat dealt by a ConvoAI (Grok) croupier on a Trulience avatar; MCP tool is source of truth; client plays the deal + shows a balance/side bar | `baccarat.md`; client `agora-trulience-sdk`#baccarat; MCP `conf/baccarat-mcp` |
+| **Baccarat dealer** | `/baccarat/?profile=baccarat_play&controllerEndpoint=wss://wvc-eu-west-2-dev-01.trulience.com` | Voice-played Baccarat dealt by a ConvoAI (Grok) croupier on a Trulience avatar; MCP tool is source of truth; client plays the deal + shows a balance/side bar | `baccarat.md`; client `agora-trulience-sdk`#baccarat; MCP `baccarat/mcp` |
 | **Signer overlay** | `/sign-client?overlay=1` | Chroma-keyed Signapse ASL signer overlaid on a video, signing what's heard | `signer-overlay.md`; `sign-video-client/signer-overlay/README.md` |
 | Sign demos | `/sign-client?sign=voiceai` / `?sign=all` | Signapse signer panel for the agent's replies / live conversation | `sign-video-client` |
 | Voice AI | `/react-voice-client?profile=VOICE` (or `PREMIUM`) | Cascading voice pipeline | agent-samples |

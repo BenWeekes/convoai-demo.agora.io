@@ -15,12 +15,12 @@ Full detail per service is in `conf/deploy.md`.
 | edt-mcp-node | 8114 | `/edt-scene/` | `web/edt-mcp-node` |
 | avatar-overlay | 8090 | `^~ /avatar-overlay/` | `avatar-overlay` (chroma overlay reference) |
 | sign-client | 7090 | `^~ /sign-client` | `sign-video-client` (sign demos + `?overlay=1`) |
-| **baccarat-mcp** | **8117** | `/baccarat-mcp/` | **`conf/baccarat-mcp/`** (this repo; `/home/ubuntu/baccarat-mcp` symlink) |
-| **baccarat-llm-proxy** | **8118** | `/baccarat-llm/` | **`conf/baccarat-mcp/llm-proxy.mjs`** (grok logging proxy) |
+| **baccarat-mcp** | **8117** | `/baccarat-mcp/` | **`baccarat/mcp/`** (this repo; `/home/ubuntu/baccarat-mcp` symlink) |
+| **baccarat-llm-proxy** | **8118** | `/baccarat-llm/` | **`baccarat/mcp/llm-proxy.mjs`** (grok logging proxy) |
 | **baccarat-client** | **3040** | `= /baccarat` → `^~ /baccarat/` | `agora-trulience-sdk/react` (branch `baccarat`) |
 | photo-call / react-photo-avatar / cards / benchmark / dealer / news | various | `/photo*`, `/dealer/`, `/benchmark/`, `/news/` | `web/*` |
 | — | — | `^~ /assets/` → `agent-samples/assets/` | static assets |
 
 Notes:
 - Client apps proxied under a path use `^~` so nginx's regex `.js/.css` cache block (line ~405) doesn't steal their assets.
-- `baccarat-mcp` + `baccarat-llm-proxy` share one dir (`conf/baccarat-mcp`, symlinked to `/home/ubuntu/baccarat-mcp`); deps symlink to `edt-mcp-node/node_modules`.
+- `baccarat-mcp` + `baccarat-llm-proxy` share one dir (`baccarat/mcp`, symlinked to `/home/ubuntu/baccarat-mcp`); deps symlink to `edt-mcp-node/node_modules`.

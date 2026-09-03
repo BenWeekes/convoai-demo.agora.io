@@ -11,7 +11,7 @@ a copy is versioned here as `conf/palabra.conf`).
    backups OUT of `sites-enabled/` (nginx loads every file there). Client path locations need `^~`.
 3. **Base backend:** clone `agent-samples`; `simple-backend` (:8082, `/simple-backend/`) with its
    gitignored `.env` (all profiles incl. `baccarat_play`); the react clients per deploy.md.
-4. **Baccarat:** `conf/baccarat-mcp` → symlink `/home/ubuntu/baccarat-mcp`, `npm i`, pm2
+4. **Baccarat:** `baccarat/mcp` → symlink `/home/ubuntu/baccarat-mcp`, `npm i`, pm2
    `baccarat-mcp` (:8117) + `baccarat-llm-proxy` (:8118); clone `agora-trulience-sdk`#`baccarat`,
    build, pm2 `baccarat-client` (:3040). See `baccarat.md`.
 5. **Signer:** clone `sign-video-client`, `.env.local` (`SIGNAPSE_API_KEY`,
