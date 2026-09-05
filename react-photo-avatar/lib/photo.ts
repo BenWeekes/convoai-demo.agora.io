@@ -298,6 +298,7 @@ export const MODEL_VARIANTS: Record<string, ModelVariant[]> = {
   EVENTDEMO: [
     { label: "Gemini Live", profile: "EVENTDEMO" },
     { label: "GPT Live", profile: "EVENTDEMO_GPT" },
+    { label: "GPT Realtime", profile: "EVENTDEMO_GPTRT" },
     { label: "Grok · xAI", profile: "EVENTDEMO_XAI" },
   ],
 }
@@ -308,7 +309,7 @@ export function modelVariants(profile: string): ModelVariant[] {
 // Realtime profiles whose MLLM supplies its OWN voice from the profile's
 // MLLM_VOICE. Don't pass a photo-derived voice_id — that's a Gemini/ElevenLabs
 // voice name the OpenAI (GPT Live) / xAI realtime models don't recognise.
-const PROFILE_OWN_VOICE = new Set(["EVENTDEMO_GPT", "EVENTDEMO_XAI"])
+const PROFILE_OWN_VOICE = new Set(["EVENTDEMO_GPT", "EVENTDEMO_GPTRT", "EVENTDEMO_XAI"])
 
 const GRADIUM_STOCK_VOICES = {
   male:   "_6Aslh2DxfmnRLmP",
