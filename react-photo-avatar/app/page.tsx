@@ -9,6 +9,7 @@ import {
   DEFAULT_PROFILE,
   deletePhoto,
   listPhotos,
+  modelVariants,
   normalizeProfile,
   type PhotoMeta,
 } from "@/lib/photo"
@@ -21,6 +22,14 @@ function HomePageInner() {
   // the voice picker (record new / pick previous / skip) instead of
   // dropping straight into the avatar call with a stock voice.
   const audiopick = params.get("audiopick") ?? ""
+
+  // Model switcher (LemonSlice photo demo): choose which realtime MLLM the
+  // avatar talks with. Variants are distinct backend profiles that share the
+  // uploaded photo; only the MLLM vendor differs. Empty for other demos.
+  const variants = modelVariants(profile)
+  const [talkProfile, setTalkProfile] = useState<string>(
+    () => variants[0]?.profile ?? profile,
+  )
 
   const [photos, setPhotos] = useState<PhotoMeta[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(initialSelected)
@@ -135,6 +144,24 @@ function HomePageInner() {
               )}
             </div>
 
+            {/* Model switcher — only for demos with MLLM variants (LemonSlice photo) */}
+            {variants.length > 1 && !audiopick && (
+              <label className="w-full flex items-center justify-between gap-3 rounded-2xl border border-white/20 px-4 py-3">
+                <span className="text-sm text-white/70">Model</span>
+                <select
+                  value={talkProfile}
+                  onChange={(e) => setTalkProfile(e.target.value)}
+                  className="bg-transparent text-right text-sm font-medium text-white focus:outline-none"
+                >
+                  {variants.map((v) => (
+                    <option key={v.profile} value={v.profile} className="bg-black text-white">
+                      {v.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
             {/* Action buttons — single row of three to save vertical space */}
             <div className="w-full grid grid-cols-3 gap-2 mt-1">
               {selected ? (
@@ -147,7 +174,7 @@ function HomePageInner() {
                   </Link>
                 ) : (
                   <a
-                    href={avatarTalkUrl(selected, profile)}
+                    href={avatarTalkUrl(selected, talkProfile)}
                     className="rounded-2xl bg-white text-black py-4 text-center text-sm sm:text-base font-semibold active:scale-[0.98] transition-transform"
                   >
                     💬 Talk

@@ -167,9 +167,24 @@ export async function submitCloneVoice(
   const { vendor = "gradium", timeoutMs = 90_000, onProgress } = opts
   return new Promise<VoiceMeta>((resolve, reject) => {
     const form = new FormData()
-    // Give the file the right extension so the backend can pick a mime.
-    const ext = /webm/i.test(audio.type) ? "webm" : /ogg/i.test(audio.type) ? "ogg" : "wav"
-    form.append("audio", audio, `sample.${ext}`)
+    // Pick the extension from the file name first (uploads), then the mime
+    // (recordings). Covers recordings (webm/ogg) and uploads (mp3/m4a/wav).
+    const t = (audio.type || "").toLowerCase()
+    const nameExt = ((audio as File).name || "").match(/\.(mp3|m4a|mp4|aac|wav|webm|ogg)$/i)?.[1]?.toLowerCase()
+    const ext =
+      nameExt ? (nameExt === "mp4" || nameExt === "aac" ? "m4a" : nameExt)
+      : /webm/.test(t) ? "webm"
+      : /ogg/.test(t) ? "ogg"
+      : /mpeg|mp3/.test(t) ? "mp3"
+      : /mp4|m4a|aac/.test(t) ? "m4a"
+      : "wav"
+    // Some browsers give an m4a File an empty type; re-wrap so the multipart
+    // part carries a Content-Type the backend accepts.
+    const mimeForExt: Record<string, string> = {
+      mp3: "audio/mpeg", m4a: "audio/mp4", wav: "audio/wav", webm: "audio/webm", ogg: "audio/ogg",
+    }
+    const blob = /^audio\//.test(t) ? audio : new Blob([audio], { type: mimeForExt[ext] || "audio/mpeg" })
+    form.append("audio", blob, `sample.${ext}`)
     const xhr = new XMLHttpRequest()
     xhr.open(
       "POST",
@@ -241,7 +256,7 @@ function buildPersonaPrompt(
       "it fits, and feel free to greet the room. Spanish or Catalan replies are welcome if the user " +
       "switches. "
     : ""
-  const wordCap = isEventAnam ? 45 : 30
+  const wordCap = isEventAnam ? 45 : 60
   return (
     `You are a friendly avatar. The user can both see and hear you. ${appearance}${eventContext}` +
     "Start the conversation in English with a neutral conversational style. " +
@@ -249,7 +264,9 @@ function buildPersonaPrompt(
     "for the rest of the conversation. " +
     "If the user asks you to switch accent (e.g. Welsh, French, Indian, American), " +
     "change character, or change age, follow their instruction for the rest of the conversation. " +
-    `Keep responses below ${wordCap} words where possible.`
+    `Aim for natural, conversational replies of up to about ${wordCap} words — when a topic is ` +
+    "interesting, feel free to elaborate and share a bit more rather than keeping it terse; " +
+    "just avoid rambling much past that."
   )
 }
 
@@ -273,6 +290,26 @@ const FIXED_AVATAR_PROFILES = new Set(["EVENTANAM", "EVENTANAMGRADIUM"])
 // — no schema change.
 const GRADIUM_PROFILES = new Set(["GRADIUMDEMO"])
 
+// Model switch for the LemonSlice photo demo: same avatar (the uploaded photo),
+// different realtime MLLM vendor. Each variant is a distinct backend profile
+// that shares EVENTDEMO's LemonSlice avatar config and only swaps the MLLM.
+export type ModelVariant = { label: string; profile: string }
+export const MODEL_VARIANTS: Record<string, ModelVariant[]> = {
+  EVENTDEMO: [
+    { label: "Gemini Live", profile: "EVENTDEMO" },
+    { label: "GPT Live", profile: "EVENTDEMO_GPT" },
+    { label: "Grok · xAI", profile: "EVENTDEMO_XAI" },
+  ],
+}
+export function modelVariants(profile: string): ModelVariant[] {
+  return MODEL_VARIANTS[profile] ?? []
+}
+
+// Realtime profiles whose MLLM supplies its OWN voice from the profile's
+// MLLM_VOICE. Don't pass a photo-derived voice_id — that's a Gemini/ElevenLabs
+// voice name the OpenAI (GPT Live) / xAI realtime models don't recognise.
+const PROFILE_OWN_VOICE = new Set(["EVENTDEMO_GPT", "EVENTDEMO_XAI"])
+
 const GRADIUM_STOCK_VOICES = {
   male:   "_6Aslh2DxfmnRLmP",
   female: "cLONiZ4hQ8VpQ4Sz",
@@ -293,7 +330,7 @@ export function avatarTalkUrl(
   const params = new URLSearchParams({ profile })
   const fixedAvatar = FIXED_AVATAR_PROFILES.has(profile)
   if (!fixedAvatar && meta.image_url) params.set("avatar_id", meta.image_url)
-  if (!fixedAvatar) {
+  if (!fixedAvatar && !PROFILE_OWN_VOICE.has(profile)) {
     // Explicit override (voice picker resolved a clone) always wins,
     // otherwise fall through the existing per-profile fallback chain.
     const voiceForProfile = opts.voiceIdOverride
