@@ -1056,8 +1056,8 @@ export function VideoAvatarClient() {
                   state={avatarVideoTrack ? "connected" : "disconnected"}
                   className={
                     isShowcase
-                      ? "h-full w-full !bg-black !rounded-none"
-                      : "h-full w-full"
+                      ? "h-full w-full !bg-black !rounded-none -scale-x-100"
+                      : "h-full w-full -scale-x-100"
                   }
                   useMediaStream={true}
                   objectFit="contain"
@@ -1096,7 +1096,7 @@ export function VideoAvatarClient() {
               <AvatarVideoDisplay
                 videoTrack={avatarVideoTrack}
                 state={avatarVideoTrack ? "connected" : "disconnected"}
-                className="h-full w-full"
+                className="h-full w-full -scale-x-100"
                 useMediaStream={true}
                 objectFit="contain"
                 placeholder={<p className="text-sm text-white/70 animate-pulse">Loading…</p>}
