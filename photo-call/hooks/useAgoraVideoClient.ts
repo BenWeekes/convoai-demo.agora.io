@@ -412,16 +412,37 @@ export function useAgoraVideoClient() {
           config.uid,
         );
 
-        // Create and publish audio track
-        const audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
-          encoderConfig: "high_quality_stereo",
-          AEC: true,
-          ANS: true,
-          AGC: true,
-          ...(config.microphoneId
-            ? { microphoneId: config.microphoneId }
-            : {}),
-        });
+        // Create and publish audio track. If the saved/selected mic device is no
+        // longer available (e.g. unplugged at a kiosk), getUserMedia throws
+        // "can not find stream after getUserMedia" — fall back to the system
+        // default device instead of failing the whole join.
+        let audioTrack;
+        try {
+          audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+            encoderConfig: "high_quality_stereo",
+            AEC: true,
+            ANS: true,
+            AGC: true,
+            ...(config.microphoneId
+              ? { microphoneId: config.microphoneId }
+              : {}),
+          });
+        } catch (micErr) {
+          if (!config.microphoneId) throw micErr;
+          console.warn(
+            "Saved mic unavailable, retrying with default device:",
+            micErr,
+          );
+          try {
+            localStorage.removeItem("selectedMicId");
+          } catch {}
+          audioTrack = await AgoraRTC.createMicrophoneAudioTrack({
+            encoderConfig: "high_quality_stereo",
+            AEC: true,
+            ANS: true,
+            AGC: true,
+          });
+        }
         await rtcClient.publish([audioTrack]);
 
         if (mode === "avatar" && voiceAIRef.current) {

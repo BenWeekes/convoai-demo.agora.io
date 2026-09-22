@@ -395,6 +395,21 @@ pm2 start react-voice-client react-video-client-avatar react-video-client-avatar
 pm2 save
 ```
 
+#### Keep the photo background (skip bg-removal) on matte profiles
+
+Profiles like `EVENTDEMO`/`EVENTSALES` set `*_PHOTO_MATTE=true`, so `/upload-photo`
+removes the background and composites the subject on black. A per-upload override
+wins over the profile flag (backend `local_server.py::upload_photo`):
+
+- **Backend:** `/upload-photo?profile=EVENTDEMO&matte=false` (or `&nobg=1`) keeps the
+  original background; `matte=true` forces removal. Accepted as query arg or form field.
+  Verified: default upload → black corners `[0 9 23]`; `matte=false` → original bg kept.
+- **Frontend (`react-photo-avatar`):** the upload page shows a **"Keep original
+  background"** checkbox for non-default profiles, and it's pre-checked from the URL
+  (`/photo?profile=EVENTDEMO&nobg=1` or `&matte=false`). `lib/photo.ts::uploadPhoto`
+  takes a `keepBg` opt that appends `&matte=false`; `app/upload/page.tsx` seeds/toggles it.
+  Requires a rebuild (below).
+
 #### Rebuild react-photo-avatar (QR upload landing)
 ```bash
 cd /home/ubuntu/web/react-photo-avatar
@@ -881,3 +896,109 @@ Note: GTM (`GTM-TKTWGML`) then loads its tags, but **GA4 data still depends on t
 config** — the container carries Google Ads tags + Consent Mode (`gcs=G1--` denied) and multiple
 GA4 ids; ensure a GA4 tag with an All-Pages trigger fires for `convoai-demo.agora.io` (check in
 GTM Preview / GA4 Realtime).
+
+
+## Commentator avatar overlays (dub a video with a talking head)
+
+Overlay a lip-synced talking head (bottom-right, green removed) onto an existing
+video — e.g. the horse-racing clip re-fronted by the Ruby Walsh / Irish
+commentator head. Output is served from `avatar-overlay/public/` →
+`https://convoai-demo.agora.io/avatar-overlay/dub.mp4`.
+
+**The sync trick:** don't re-speak the commentary with TTS (that never lines up).
+Drive the avatar's face with the video's **own original audio**, so lips match
+frame-for-frame. Anam can be driven directly (not via ConvoAI) using its
+audio-in → A/V-out protocol: it joins an Agora channel and publishes a
+lip-synced H264 stream that we record with the Go SDK, then composite.
+
+Protocol reference: **github.com/anam-org/agora_convoai_to_video** (auth →
+session → WebSocket `voice` PCM16 chunks). Scripts live in
+`/home/ubuntu/commentator-overlay/` (they import `core.tokens` from
+`simple-backend` and use its `venv`, which has `websockets`/`numpy`).
+
+### Pipeline
+
+```bash
+cd /home/ubuntu/commentator-overlay
+PY=/home/ubuntu/agent-samples/simple-backend/venv/bin/python
+
+# 0. one-off: extract the source audio as 24 kHz mono PCM16 (Anam's voice input)
+ffmpeg -y -i /home/ubuntu/c.mp4 -vn -ac 1 -ar 24000 -c:a pcm_s16le c_audio_24k.wav
+
+# 1. drive Anam with that audio + record its published head (uid 102). ~ realtime,
+#    so a 391 s clip takes ~7 min. Writes anamwork/recv.264 + anamwork/audio.wav
+$PY anam_dub.py 391.4 unused.mp4
+
+# 2. align (cross-correlate the echoed audio vs the original) + composite
+$PY compose_anam.py 391.4 /home/ubuntu/avatar-overlay/public/dub.mp4
+```
+
+### Key fields / knobs
+
+- **Anam direct API:** `BASE=https://api.anam.ai/v1` (note the `/v1`; bare
+  `/auth/session-token` 404s). `Authorization: Bearer <ANAMDUB_AVATAR_API_KEY>`
+  (the base64 `id:secret` from `simple-backend/.env`).
+- **agoraSettings** (must match so we can decode): `appId=9db43e0c…`,
+  `token` minted for `uid=102` via `core.tokens.build_token_with_rtm`,
+  `videoEncoding:"H264"` (AV1 won't decode in `recv_av`), `audioSampleRate:24000`,
+  `enableStringUids:false`, `activityIdleTimeout:600`.
+- **Avatar:** `25e82830-6ea5-4c4f-9090-6f155e2d7c66` (Irish head, **green** bg,
+  cara-4, renders 1152×768). The *original* `dub.mp4` male head was
+  `63da52ea-…` — different avatar id namespace notes are in the session log.
+- **WebSocket:** send `init`, a `heartbeat` every 5 s, then `voice` frames
+  (`{audio: base64(PCM16 0.5s chunk), sample_rate:24000, encoding:"PCM16"}`)
+  paced ~realtime, then `voice_end`. Kill with `POST /v1/engine/session/<id>/kill`.
+- **Recorder:** `recv_av <appid> <channel> 102` from
+  `/home/ubuntu/palabra/server/vendor_sdk/bin/` — needs
+  `LD_LIBRARY_PATH=…/vendor_sdk/agora_sdk` + `AGORA_APP_ID`/`AGORA_APP_CERTIFICATE`.
+  It publishes a silent PCM track itself (else `LocalAudioTrack.Release(nil)`
+  segfaults when LemonSlice/Anam trigger `OnCapabilitiesChanged`).
+- **Alignment:** `fps = frames / audio.wav_duration` (video & audio share the
+  uid-102 clock); cross-correlate `audio.wav` (Anam echoes the voice) against the
+  original to get offset `D` (~7 s = WS warm-up + join latency), trim the head by `D`.
+- **Composite filter:** `crop=iw*0.6:ih:iw*0.2:0` (drops **20% L/R**),
+  `chromakey=0x05E300:0.14:0.10`, `despill=type=green`, `scale=SCALE*1280:-1`,
+  `overlay=W-w+PUSH_X:H-h+PUSH_Y`. Video from the head, **audio from the original**
+  (`-map 0:a`). Always `-movflags +faststart` or the browser can't scrub/download.
+- **Size / corner-flush:** `SCALE` is arg 3 (frac of 1280 width; the shipped small
+  corner bug is `0.17`). It sits flush in the bottom-right corner; `PUSH_X`/`PUSH_Y`
+  (env, pixels) shove it further off the right/bottom edge so the keyed-empty margin
+  around the body clips away and the **visible body edge meets the frame edge** —
+  `PUSH_X=40` at `SCALE=0.17` aligns his shoulder to the right edge with the face
+  intact. Preview on a single still (overlay one avatar frame on one `c.mp4` frame)
+  before committing a ~6 min full encode.
+
+### Variant: re-voice with Gradium TTS (instead of the original audio)
+
+Same head, but the commentary is re-spoken in a Gradium voice, kept in time by
+placing each STT sentence at its **original timestamp**. Output → a **separate**
+URL (`dub-gradium.mp4`) — don't overwrite `dub.mp4`.
+
+- **Gradium TTS is a WebSocket** at `wss://api.gradium.ai/api/speech/tts`, auth
+  header `x-api-key: <gsk_…>` (query-string auth is rejected). Message flow:
+  `{"type":"setup","voice_id":"<id>","model_name":"default","output_format":"wav"}`
+  → `{"type":"text","text":"…"}` → `{"type":"end_of_stream"}`; replies are
+  `ready`, then `audio` messages with **base64** `wav` (48 kHz mono; first chunk
+  carries the header, rest is raw PCM — just concatenate), then `end_of_stream`.
+  Keep concurrency low (≈2) or requests get dropped.
+- `gradium_bed.py` synthesizes every `sentences.json` line (voice
+  `rvIuvTjVuZvs2VBO`), lays each at its `start_ms` trimmed to the gap, and writes
+  `gradium_bed.wav` (48 k, final track) + `gradium_bed_24k.wav` (drives Anam). It
+  is **resumable** (skips finished segments) and pads any straggler with silence.
+- **Pace / energy (match the original caller):** Gradium reads ~16% slower than a
+  live race-caller, so at 1.0× **65/90 sentences overran their slot and got cut
+  off**. Fix in the `setup` message via `json_config` (a JSON **string**):
+  `padding_bonus` (−4..4, **negative = faster**) and `temp` (0..1.4, higher =
+  livelier). `{"padding_bonus":-2.5,"temp":1.1}` drops the avg dur/slot ratio
+  1.16→0.85 (overruns 65→14). `gradium_bed.py` then `atempo`-fits (≤1.8×) only the
+  remaining overruns, so nothing is truncated and the cadence tracks the race.
+- Then reuse the same two scripts via env vars:
+  ```bash
+  ANAM_WAV=$PWD/gradium_bed_24k.wav ANAM_WORK=$PWD/anamwork_grad $PY anam_dub.py 391.4 x.mp4
+  ANAM_WORK=$PWD/anamwork_grad ANAM_ALIGN_WAV=$PWD/gradium_bed_24k.wav \
+    ANAM_AUDIO=$PWD/gradium_bed.wav $PY compose_anam.py 391.4 \
+    /home/ubuntu/avatar-overlay/public/dub-gradium.mp4
+  ```
+  `ANAM_AUDIO` (a wav) replaces the original track and is also what the head is
+  aligned against; `ANAM_WAV`/`ANAM_WORK` let the Gradium run use its own input
+  and recording dir so the original `dub.mp4` pipeline is untouched.

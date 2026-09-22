@@ -2,8 +2,8 @@
 
 This **private** repo is the rebuild bible for the `convoai-demo.agora.io` demo server.
 It holds the nginx config, the canonical `conf/deploy.md`, and the **demo-specific service
-source** that doesn't live in a client repo. Each such demo gets its own root folder (currently
-`baccarat/`); `conf/` and `docs/` hold only shared config + docs.
+source** that doesn't live in a client repo. Each such demo/tool gets its own root folder
+(e.g. `baccarat/`, `avatar-direct/`); `conf/` and `docs/` hold only shared config + docs.
 
 Client apps live in their own repos and are cloned/built per `deploy.md`:
 - `github.com/BenWeekes/agora-trulience-sdk` (branch `baccarat`) — the Baccarat casino web client.

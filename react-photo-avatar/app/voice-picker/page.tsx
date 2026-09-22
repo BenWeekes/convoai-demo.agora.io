@@ -198,6 +198,38 @@ function VoicePickerInner() {
     setRecordedDurationMs(0)
   }
 
+  // Upload an existing audio file (mp3/m4a/wav) instead of recording — it
+  // feeds the exact same preview + clone flow as a recording.
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const onFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = "" // allow re-picking the same file
+    if (!file) return
+    if (file.size > 8 * 1024 * 1024) {
+      setError("File too large — max 8 MB.")
+      return
+    }
+    const okType = /audio\/(mpeg|mp3|mp4|x-m4a|m4a|aac|wav|wave|x-wav|webm|ogg)/i.test(file.type)
+    const okName = /\.(mp3|m4a|mp4|aac|wav|webm|ogg)$/i.test(file.name)
+    if (!okType && !okName) {
+      setError("Please choose an MP3, M4A or WAV file.")
+      return
+    }
+    if (recordedUrl) URL.revokeObjectURL(recordedUrl)
+    const url = URL.createObjectURL(file)
+    setRecordedBlob(file)
+    setRecordedUrl(url)
+    setRecordedDurationMs(0)
+    setError(null)
+    // Best-effort duration for the label (uploads have no record timer).
+    const probe = new Audio()
+    probe.preload = "metadata"
+    probe.onloadedmetadata = () => {
+      if (isFinite(probe.duration)) setRecordedDurationMs(Math.round(probe.duration * 1000))
+    }
+    probe.src = url
+  }
+
   const submitClone = async () => {
     if (!recordedBlob) return
     setSubmitting(true)
@@ -269,21 +301,41 @@ function VoicePickerInner() {
         {/* Record new voice */}
         <section className="w-full rounded-2xl border border-white/15 bg-white/5 p-4 flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-medium">🎤 Record new voice</h2>
+            <h2 className="text-lg font-medium">🎤 Record or upload a voice</h2>
             <span className="text-xs text-white/50 font-mono">{nowLabel}</span>
           </div>
           <p className="text-xs text-white/60">
-            Speak naturally for 5-30 seconds — the clone quality is best on
-            a clean, single-speaker sample. Recording auto-stops at 30 s.
-            Your recording is stored so it can be selected later.
+            Record 5-30 seconds of clean, single-speaker speech, or upload an
+            MP3 / M4A / WAV file (max 8 MB). Recording auto-stops at 30 s.
+            The sample is stored so the clone can be selected later.
           </p>
           {!recordedBlob && !recording && (
-            <button
-              onClick={startRecording}
-              className="w-full rounded-lg bg-red-500 hover:bg-red-400 text-white py-3 font-medium"
-            >
-              ● Start recording
-            </button>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={startRecording}
+                className="w-full rounded-lg bg-red-500 hover:bg-red-400 text-white py-3 font-medium"
+              >
+                ● Start recording
+              </button>
+              <div className="flex items-center gap-3 text-xs text-white/40">
+                <div className="flex-1 h-px bg-white/10" />
+                or
+                <div className="flex-1 h-px bg-white/10" />
+              </div>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full rounded-lg border border-white/30 py-3 font-medium hover:bg-white/10"
+              >
+                ⬆ Upload MP3 / M4A
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".mp3,.m4a,.wav,audio/mpeg,audio/mp4,audio/x-m4a,audio/wav,audio/ogg"
+                className="hidden"
+                onChange={onFilePick}
+              />
+            </div>
           )}
           {recording && (
             <div className="flex flex-col gap-2">

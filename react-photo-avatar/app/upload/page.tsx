@@ -14,6 +14,10 @@ function UploadPageInner() {
   const searchParams = useSearchParams()
   const profile = normalizeProfile(searchParams.get("profile"))
   const audiopick = searchParams.get("audiopick") ?? ""
+  // Some profiles (e.g. EVENTDEMO) remove the photo background by default. Let the
+  // user keep it — seeded from ?nobg=1 / ?matte=false, toggled by the checkbox.
+  const nobg = (searchParams.get("nobg") ?? "").toLowerCase()
+  const matte = (searchParams.get("matte") ?? "").toLowerCase()
 
   const fileRef = useRef<HTMLInputElement | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
@@ -21,6 +25,9 @@ function UploadPageInner() {
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [keepBg, setKeepBg] = useState<boolean>(
+    ["1", "true", "yes", "on"].includes(nobg) || matte === "false",
+  )
 
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0]
@@ -40,6 +47,7 @@ function UploadPageInner() {
     try {
       const meta = await uploadPhoto(file, profile, {
         onProgress: setProgress,
+        keepBg,
       })
       if (!meta.id) throw new Error("upload returned no id")
       const q = new URLSearchParams()
@@ -95,6 +103,18 @@ function UploadPageInner() {
 
         {error && (
           <p className="text-sm text-red-400 text-center w-full">{error}</p>
+        )}
+
+        {profile !== DEFAULT_PROFILE && (
+          <label className="w-full flex items-center gap-2 text-sm text-white/70 select-none cursor-pointer">
+            <input
+              type="checkbox"
+              checked={keepBg}
+              onChange={(e) => setKeepBg(e.target.checked)}
+              className="h-4 w-4 accent-white"
+            />
+            Keep original background (don&apos;t remove it)
+          </label>
         )}
 
         <div className="w-full flex flex-col gap-3 mt-auto">

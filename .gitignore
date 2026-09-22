@@ -29,3 +29,16 @@ uploads/
 
 # upstream repo clone for /benchmark — managed separately, not part of this repo
 benchmark/
+
+# Python virtualenvs + caches (source only in git)
+**/venv/
+**/.venv/
+**/__pycache__/
+*.pyc
+
+# ad-hoc backups
+*.bak
+*.bak-*
+
+# nested client-repo clones managed separately (have their own .git)
+cards/

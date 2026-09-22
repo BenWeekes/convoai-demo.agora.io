@@ -1,0 +1,14 @@
+# recordings / outputs / work dirs
+work*/
+*/recv.264
+*/audio.wav
+*/video.timestamps
+*/v.mkv
+*/rec.log
+*/meta.txt
+*.mp4
+*.wav
+input_24k.wav
+# built recorder binary
+recv_av
+__pycache__/

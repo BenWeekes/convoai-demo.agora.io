@@ -30,9 +30,14 @@ export type PhotoMeta = {
 export async function uploadPhoto(
   file: File,
   profile: string = DEFAULT_PROFILE,
-  opts: { timeoutMs?: number; onProgress?: (fraction: number) => void } = {},
+  opts: {
+    timeoutMs?: number
+    onProgress?: (fraction: number) => void
+    keepBg?: boolean // true => keep original background (skip matte/bg-removal)
+  } = {},
 ): Promise<PhotoMeta> {
-  const { timeoutMs = 25000, onProgress } = opts
+  const { timeoutMs = 25000, onProgress, keepBg } = opts
+  const matteParam = keepBg ? "&matte=false" : ""
   // XMLHttpRequest gives us upload-byte progress (fetch doesn't). Hard timeout
   // surfaces a stalled 5G handshake as an error so the caller's catch fires
   // and re-enables the button instead of hanging forever.
@@ -42,7 +47,7 @@ export async function uploadPhoto(
     const xhr = new XMLHttpRequest()
     xhr.open(
       "POST",
-      `${BACKEND}/upload-photo?profile=${encodeURIComponent(profile)}`,
+      `${BACKEND}/upload-photo?profile=${encodeURIComponent(profile)}${matteParam}`,
     )
     xhr.timeout = timeoutMs
     xhr.responseType = "json"
