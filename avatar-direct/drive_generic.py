@@ -36,6 +36,7 @@ from agora_token import build_token_with_rtm
 API_BASE = os.environ["API_BASE"].rstrip("/")
 API_KEY  = os.environ["API_KEY"]
 AVATAR   = os.environ["AVATAR_ID"]
+ASPECT   = os.environ.get("ASPECT", "")   # e.g. "1x1" / "3x2" (LemonSlice aspect hint)
 HERE = os.path.dirname(os.path.abspath(__file__))
 WAV  = os.environ.get("WAV", os.path.join(HERE, "input_24k.wav"))
 WORK = os.environ.get("WORK", os.path.join(HERE, "work")); os.makedirs(WORK, exist_ok=True)
@@ -60,6 +61,7 @@ def agora_settings():
 def start_session():
     body={"avatar_id":AVATAR,"quality":"high","version":"v1","video_encoding":"H264",
           "activity_idle_timeout":120,"area":"NORTH_AMERICA","agora_settings":agora_settings()}
+    if ASPECT: body["aspect_ratio"]=ASPECT
     r=requests.post(f"{API_BASE}/session/start",
                     headers={"x-api-key":API_KEY,"content-type":"application/json"},
                     json=body, timeout=90)
@@ -79,6 +81,7 @@ async def run_ws(ws_addr, sid):
     init={"command":"init","session_id":sid,"avatar_id":AVATAR,"quality":"high","version":"v1",
           "video_encoding":"H264","activity_idle_timeout":120,"area":"NORTH_AMERICA",
           "agora_settings":agora_settings()}
+    if ASPECT: init["aspect_ratio"]=ASPECT
     await ws.send(json.dumps(init)); print("init sent")
     async def listen():
         try:

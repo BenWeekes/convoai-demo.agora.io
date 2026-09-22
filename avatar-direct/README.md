@@ -88,7 +88,7 @@ SRC=$PWD/input.m4a WORK=$PWD/tavus python3 compose_grid.py tavus.mp4 480
 ## Per-provider notes
 
 - **LemonSlice** — `avatar_id` is an **image URL**; returns `201`; can be slow to cold-start.
-  Output aspect follows the image; sends `init_ack`.
+  Output aspect follows the image unless you pass `ASPECT=1x1`/`3x2`; sends `init_ack`.
 - **Tavus** — `avatar_id` is a **persona id** (`p…`); WS is a `media-proxy` host; 1280×720.
   Use a persona that exists on the key (list: `GET https://tavusapi.com/v2/personas`).
 - **Protoface** — free tier is rate-limited (429 if you hammer it / leave sessions open);
