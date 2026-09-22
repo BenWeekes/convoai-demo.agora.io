@@ -167,6 +167,9 @@ func main() {
 			if wantUid != "" && uid != wantUid {
 				return true
 			}
+			// Record audio from its first frame. Both audio and video streams from this
+			// uid begin with the same content (word 1) — the arrival gap is just network
+			// delay — so downstream we mux both from frame 0 with NO offset.
 			tmu.Lock()
 			if !audioSet {
 				audioT0 = time.Now()

@@ -45,8 +45,36 @@ voice streaming. See `drive_anam.py`.
 | `drive_generic.py` | Unified driver (LemonSlice / Tavus / Protoface / any `/session/start` vendor) |
 | `drive_anam.py` | Anam two-step variant |
 | `agora_token.py` | Agora v007 RTC/RTM token builder (mints the channel token) |
-| `recv_av.go` | Go subscriber/recorder — captures the avatar uid's H264 → `recv.264` (+ per-frame `video.timestamps`), and its audio → `audio.wav` |
-| `compose_grid.py` | Reconstruct video (mkvmerge, real timestamps) + mux the **source** audio aligned to the lips → streamable MP4 |
+| `recv_av.go` | Go subscriber/recorder — captures the avatar uid's H264 → `recv.264` (+ per-frame `video.timestamps`), and its audio → `audio.wav` (+ `meta.txt`) |
+| `compose_native.py` | Reconstruct video (mkvmerge, real timestamps) + mux the recording's **own captured** audio, aligned by the captured offset → streamable MP4 |
+
+## A/V sync — how the recording stays in sync (read this before touching it)
+
+The rule: **do not align A/V yourself.** The provider publishes audio+video into the
+Agora channel already in sync (shared RTP timing), so every subscriber receives them in
+sync. We just record what comes out of the channel in realtime and never assume a fixed
+FPS. Concretely:
+
+1. **Warm up before joining.** `drive_*.py` opens the session and streams `init`, then
+   waits `WARMUP` seconds (**default 15**) *before* starting `recv_av`. Slow providers
+   (LemonSlice cold-start) publish video several seconds after their first audio; if the
+   recorder joins immediately it captures that startup/silence lead and the clip looks
+   offset. Joining *after* the provider is already publishing both streams makes
+   `audio_offset_ms ≈ 0`, so **all four providers record identically**.
+2. **Real per-frame timestamps, not fixed FPS.** `recv_av` writes each encoded frame's
+   time to `video.timestamps` (mkvmerge v2, preferring the media `CaptureTimeMs` clock).
+   `compose_native.py` feeds those to `mkvmerge --timestamps` so the reconstructed video
+   keeps the true realtime cadence even when frames drop.
+3. **Mux the recording's own audio, offset by the captured value only.** `recv_av`
+   records only the avatar uid's republished (already-synced) audio to `audio.wav` and
+   writes `audio_offset_ms` (audio start − video start) to `meta.txt`. `compose_native.py`
+   locks `video[t] ↔ audio[t−offset]` — no cross-correlation, no lip/waveform matching.
+4. **Trim to an identical lead + length.** Every clip is trimmed so speech begins at
+   `LEAD` (0.5 s) with the same `DUR`, so the grid can start them together and they play
+   in sync. (Verified: all four land within ~40 ms of each other.)
+
+If sync ever looks off for one provider, the fix is almost always **more `WARMUP`**, not
+post-processing math.
 
 ## Setup
 
@@ -81,9 +109,12 @@ API_BASE=https://api.protoface.com/v1/agora/ API_KEY=$PROTO_KEY \
 # Anam (two-step; avatar_id = anam avatar uuid, ANAM_MODEL=cara-4)
 API_KEY=$ANAM_KEY AVATAR_ID=<uuid> ANAM_MODEL=cara-4 WORK=$PWD/anam python3 drive_anam.py
 
-# Compose each with the identical source audio muxed on
-SRC=$PWD/input.m4a WORK=$PWD/tavus python3 compose_grid.py tavus.mp4 480
+# Compose each: reconstruct video + mux its own captured audio, offset-aligned, trimmed
+WORK=$PWD/tavus python3 compose_native.py tavus.mp4 480   # 480 = output height
 ```
+
+`WARMUP` (seconds before the recorder joins, default 15) and `DUR` (record seconds) are
+env-tunable per run. Bump `WARMUP` for a provider that's slow to start publishing video.
 
 ## Per-provider notes
 

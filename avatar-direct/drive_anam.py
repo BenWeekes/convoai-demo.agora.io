@@ -75,11 +75,16 @@ async def stream(ws):
 
 async def main():
     st=auth(); sid,ws_addr=start(st); print("session",sid)
+    ws,hb=await run(ws_addr,sid)
+    # See drive_generic.py: warm up (provider publishing A/V in sync) before the
+    # recorder joins, so audio_offset_ms ≈ 0 and clips record identically.
+    warm=float(os.environ.get("WARMUP","15")); print(f"warmup {warm}s before recorder joins channel...")
+    await asyncio.sleep(warm)
     env=dict(os.environ, AGORA_APP_ID=APP, AGORA_APP_CERTIFICATE=CERT)
     if SDK_LIB: env["LD_LIBRARY_PATH"]=SDK_LIB
     rec=subprocess.Popen([RECV_AV,APP,CH,UID],cwd=WORK,env=env,stdout=open(WORK+"/rec.log","w"),stderr=subprocess.STDOUT)
     try:
-        ws,hb=await run(ws_addr,sid); await asyncio.sleep(2.0)
+        await asyncio.sleep(2.0)
         await stream(ws); await asyncio.sleep(max(0,DUR-_AS)); hb.cancel(); await ws.close()
     finally:
         rec.send_signal(signal.SIGINT); time.sleep(2)

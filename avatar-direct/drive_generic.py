@@ -108,12 +108,19 @@ async def main():
     global SESSION_TOKEN
     sid, ws_addr, SESSION_TOKEN = start_session()
     print("session", sid, "ws", ws_addr[:70])
+    ws, lt = await run_ws(ws_addr, sid)
+    # KEY to A/V sync: wait until the provider is fully spun up and publishing BOTH
+    # audio+video in sync BEFORE the recorder joins the channel. Slow providers (e.g.
+    # LemonSlice cold-start) otherwise publish video seconds after audio; joining late
+    # skips that startup so audio_offset_ms ≈ 0 and every clip records identically.
+    warm = float(os.environ.get("WARMUP", "15"))
+    print(f"warmup {warm}s before recorder joins channel...")
+    await asyncio.sleep(warm)
     env=dict(os.environ, AGORA_APP_ID=APP, AGORA_APP_CERTIFICATE=CERT)
     if SDK_LIB: env["LD_LIBRARY_PATH"]=SDK_LIB
     rec=subprocess.Popen([RECV_AV, APP, CH, UID], cwd=WORK, env=env,
                          stdout=open(WORK+"/rec.log","w"), stderr=subprocess.STDOUT)
     try:
-        ws, lt = await run_ws(ws_addr, sid)
         await asyncio.sleep(2.0)
         await stream_audio(ws)
         await asyncio.sleep(max(0, DUR-_AUDIO_S))
