@@ -47,6 +47,7 @@ voice streaming. See `drive_anam.py`.
 | `agora_token.py` | Agora v007 RTC/RTM token builder (mints the channel token) |
 | `recv_av.go` | Go subscriber/recorder — captures the avatar uid's H264 → `recv.264` (+ per-frame `video.timestamps`), and its audio → `audio.wav` (+ `meta.txt`) |
 | `compose_native.py` | Reconstruct video (mkvmerge, real timestamps) + mux the recording's **own captured** audio, aligned by the captured offset → streamable MP4 |
+| `compose_src.py` | Same reconstruction, but mux a **pristine source** WAV (full 24k, byte-identical to what drove the lip-sync) instead of the band-limited echo — for the cleanest audio. Used by the commentary-overlay workflow (`docs/ai/L1/avatar-commentary-overlay.md`). |
 
 ## A/V sync — how the recording stays in sync (read this before touching it)
 

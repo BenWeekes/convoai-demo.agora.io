@@ -12,6 +12,7 @@ Each demo's URL, what it is, its repo, and where the detail lives.
 | Therapist | `/react-video-client-avatar-thymia` | Avatar + voice/video biomarkers | agent-samples `recipes/therapist.md` |
 | EDT luma | `/edt`, `/edt-gemini` | 3D air-fryer viewer via MCP `set_scene` | `web/edt-mcp-node`, luma client |
 | **Avatar grid** | `/avatar-overlay/avatar-grid.html` | Four avatar providers (Tavus, LemonSlice, Anam, Protoface) lip-syncing the **same** audio, driven **directly** (no ConvoAI) with a fixed WAV | `avatar-direct/README.md`; sizing/aspect capabilities: `avatar-provider-sizing.md` |
+| **Avatar commentary** | `/avatar-overlay/lotto-gina.html`, `…lotto-gina-v2.html` | Avatar ("Gina") commentates over a lotto video — timed personality commentary, chroma-keyed into the corner | `avatar-commentary-overlay.md` |
 | Others | `/photo`, `/dealer/`, `/news/`, `/benchmark/`, `/create` (palabra) | see deploy.md | `web/*` |
 
 Landing page (`/`) lists the headline demos: `/var/www/landing/index.html` (root-owned, **not** in git).
