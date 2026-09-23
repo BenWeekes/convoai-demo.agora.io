@@ -116,6 +116,23 @@ WORK=$PWD/tavus python3 compose_native.py tavus.mp4 480   # 480 = output height
 `WARMUP` (seconds before the recorder joins, default 15) and `DUR` (record seconds) are
 env-tunable per run. Bump `WARMUP` for a provider that's slow to start publishing video.
 
+## Aspect ratio / dimensions
+
+Each provider controls output size differently, and the `convoai_to_video` protocol
+standardizes **no** size field (only `quality`, which is bitrate not resolution). Full
+measured matrix — how to switch portrait/landscape/square and the exact dims per mode —
+is in **`docs/ai/L1/avatar-provider-sizing.md`**. Quick version:
+
+| Provider | Control | Modes (measured) |
+|---|---|---|
+| Anam | `width`/`height` (two-step) | cara-4: 1152×768 (3:2) or 768×1152 (2:3) only — no square |
+| LemonSlice | `aspect_ratio` (`ASPECT=`) | 1x1→432² · 16x9→608×336 · 9x16→336×608 · 2x3→368×560 · 3x2→560×368 |
+| Tavus | none (fixed by avatar) | `r82c08901584`→720×720; `aspect_ratio` ignored |
+| Protoface | none (fixed) | 512×512; `aspect_ratio` ignored |
+
+No aspect is shared by all four: **1:1** covers Tavus/LemonSlice/Protoface but not Anam
+(floor 3:2); **2:3 / 3:2** covers Anam + LemonSlice only.
+
 ## Per-provider notes
 
 - **LemonSlice** — `avatar_id` is an **image URL**; returns `201`; can be slow to cold-start.
