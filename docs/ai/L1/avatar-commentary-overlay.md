@@ -51,10 +51,30 @@ Re-sample a tight window at `fps=1` (crop to the region of interest) to pin fast
   sibilants). Then apply a limiter for headroom:
   `ffmpeg -f s16le -ar 24000 -ac 1 -i in.raw -af "alimiter=level_in=1:level_out=0.84:limit=0.97:attack=5:release=50" out.wav`
 - **Emotion**, two options:
-  - **v3** (`eleven_v3`): inline tags `[excited]`, `[announcing]`, `[laughs]` — subtle.
+  - **v3** (`eleven_v3`): inline audio tags (see below). Run at **stability ~0.3** or the
+    tags barely register.
   - **v2** (`eleven_multilingual_v2`): no tags; set **per-line** `style` (higher = more
     expressive, ~0.8 for hype/ball-calls) and `stability` (lower = more variation, ~0.25),
     `use_speaker_boost:true`. This gave the more natural, varied read in the example.
+
+### ElevenLabs v3 audio tags (reference)
+
+The tag set is **open-ended, not a fixed enum** — the model interprets bracketed cues, so
+descriptive tags like `[announcing]`, `[tense]`, `[nervous]`, `[dramatically]`,
+`[whispering]` work by interpretation even though they aren't in the official list.
+Documented working tags (elevenlabs.io/docs/best-practices/prompting/eleven-v3):
+
+- **Emotion / delivery:** `[excited]` `[sarcastic]` `[curious]` `[crying]` `[mischievously]` `[snorts]`
+- **Non-verbal vocal:** `[laughs]` `[laughs harder]` `[starts laughing]` `[wheezing]` `[whispers]` `[sighs]` `[exhales]` `[swallows]` `[gulps]`
+- **Sound effects** (hit-or-miss): `[gunshot]` `[applause]` `[clapping]` `[explosion]`
+- **Experimental:** `[strong X accent]` (fill in X) `[sings]` `[woo]` `[fart]`
+
+Caveats: tag effect is **voice-dependent** (a calm voice resists `[shouting]`); **stability**
+gates responsiveness (Creative ~0.0 = most expressive but can hallucinate, Natural ~0.5 =
+balanced, Robust ~1.0 = ignores directional tags); **punctuation** (ellipses, CAPS, `!`)
+complements tags — lean on it when a tag reads flat. Tags are directives, so for non-English
+speech keep the **spoken text in the target language and the bracket tags in English**
+(e.g. German commentary with `[excited]`/`[tense]` cues).
 
 ## 4. Assemble the timed track
 
