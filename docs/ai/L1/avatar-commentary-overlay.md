@@ -76,6 +76,23 @@ complements tags — lean on it when a tag reads flat. Tags are directives, so f
 speech keep the **spoken text in the target language and the bracket tags in English**
 (e.g. German commentary with `[excited]`/`[tense]` cues).
 
+### Clean an existing recording's audio (de-crackle / de-noise)
+
+To strip crackle and non-voice static from an **already-recorded** mp4 (not TTS), keep the
+video and reprocess only the audio:
+
+```bash
+# declick (crackle) + RNNoise (voice-trained; drops non-voice noise, keeps speech)
+curl -sL -o std.rnnn https://raw.githubusercontent.com/GregorR/rnnoise-models/master/somnolent-hogwash-2018-09-01/sh.rnnn
+ffmpeg -i in.mov -af "adeclick,arnndn=m=std.rnnn" -c:v copy -c:a aac -b:a 192k -movflags +faststart out.mp4
+```
+
+- `adeclick` targets impulsive crackle; `arnndn` (RNNoise) removes broadband hiss/static
+  while preserving voice — far better than a static `afftdn`/`highpass` for speech.
+- More aggressive: add `afftdn=nf=-30` or a stronger declick. Gentler: `arnndn` alone.
+- Verify by comparing **spectrograms** (`showspectrumpic`) — the inter-word haze should drop
+  while the speech harmonics stay intact — and the quietest-20% RMS (noise floor).
+
 ## 4. Assemble the timed track
 
 Place each limited utterance at its cue on a silent canvas the length of the video, in
