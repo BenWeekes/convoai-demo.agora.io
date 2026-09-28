@@ -109,24 +109,26 @@ track = idle face; speech = lip-sync.
 
 ## 6. Align + chroma-key + composite
 
-Reconstruct with real timestamps, find where **track t=0** sits in the recording, trim the
-avatar clip so its t=0 == source-video t=0, then key + overlay. `avatar-direct/compose_src.py`
-does the audio-onset alignment for a single clip; the overlay adds:
+**A/V sync rule (do this, not the clever thing):** `recv_av` captures the provider's video
+AND audio *already in sync* from the Agora channel — the 15s warmup only lets it start
+publishing. So build the avatar clip with **`compose_native.py`**, which muxes the recorded
+video with the recorded **echo audio**, kept locked by the single captured offset
+(`astart = vstart − audio_offset`). Then overlay using **that clip's own audio**. That's it —
+the mouth and voice are the exact SDK-recorded pair, so they cannot drift.
 
 ```bash
-mkvmerge -o v.mkv --timestamps 0:video.timestamps recv.264
-# track-t0 in the recording = audio_offset(ms)/1000 + first-utterance-onset - lead_before_first_line
-ffmpeg -ss <vstart> -i v.mkv -t <video_dur> -an -c:v libx264 -crf 18 gina_aligned.mp4
-# composite: key the blue bg out, overlay, use the CLEAN track as audio
-ffmpeg -i source.mov -i gina_aligned.mp4 -i timed_track.wav -filter_complex \
- "[1:v]scale=-1:528,colorkey=0x0061f5:0.24:0.08[g];\
-  [0:v][g]overlay=x=W-w+10:y=H-h-16:shortest=1[v]" \
- -map "[v]" -map "2:a" -t <video_dur> \
- -c:v libx264 -crf 20 -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart out.mp4
+# in-sync avatar clip: recorded video + recorded echo audio (compose_native handles the offset)
+WORK=<rec_dir> DUR=<len> python3 compose_native.py avatar.mp4 <height>
+# roulette/base video (keep its watermark; freeze the tail for the outro)
+ffmpeg -i source.mov -vf "tpad=stop_duration=3.5:stop_mode=clone" -an base.mp4
+# composite: key the bg out, overlay, and use the AVATAR CLIP'S OWN audio (map 1:a)
+ffmpeg -i base.mp4 -i avatar.mp4 -filter_complex \
+ "[1:v]chromakey=0x28b22b:0.16:0.01[g];[0:v][g]overlay=x=W-w+55:y=H-h:shortest=1[v]" \
+ -map "[v]" -map "1:a" -t <len> \
+ -c:v libx264 -crf 21 -pix_fmt yuv420p -c:a aac -b:a 192k -movflags +faststart out.mp4
 ```
 
-Sample the avatar's background colour from a corner first (`ffprobe`/pixel read); the
-example's LemonSlice blue is ~`#0061f5`.
+Sample the avatar's background colour from a corner first (`ffprobe`/pixel read).
 
 ## Gotchas (learned the hard way)
 
@@ -136,8 +138,21 @@ example's LemonSlice blue is ~`#0061f5`.
 - **Never put `-ss` on both overlay inputs** — two input-seeks desync the overlay PTS and
   the avatar silently doesn't render. Add `setpts=PTS-STARTPTS` when seeking one input for a
   still test; for the real render feed both from t=0 (no input `-ss`).
-- **Mux the clean SOURCE audio**, not the provider's echoed audio — the echo is 16k
-  band-limited; the source is full 24k and byte-identical to what drove the lip-sync.
+- **A/V sync — carry the RTC-recorded pair; do NOT mux a separate source track and align the
+  video to it.** `recv_av` records the provider's video + audio already in sync from the
+  channel. `compose_native.py` keeps them locked via the one captured `audio_offset`, so the
+  mouth cannot drift. **Muxing the separate 24k source and positioning the video by
+  onset-detection is what drifts** (an onset caught a few ms late pushes the mouth *ahead* of
+  the voice — cost me ~190ms on a roulette clip). The source is crisper (24k vs the echo's
+  16k), but it's only worth it if you accept a precise alignment step (envelope
+  cross-correlation, `compose_src.py`), which is fragile; for overlays, prefer the echo via
+  `compose_native` and use the avatar clip's **own** audio (`-map 1:a`).
+- **Multi-avatar mux (one shared audio):** you can't give each tile its own audio, so align
+  every tile's video to the shared track by **envelope cross-correlation of its audio against
+  the reference tile's audio** (all avatars lip-synced the *same* source, so matching the
+  audio content matches the mouths). This preserves each avatar's RTC sync on the shared
+  track — verify residual lag ≈ 0 for every tile. Single-threshold onset detection is NOT
+  reliable here (providers' onsets varied by 300–800ms).
 - **Cue timing drift**: a long line pushes later lines; keep hype lines tight, or the cold
   read lands after its on-screen graphic.
 - **Ordinal calls read better**: "the second ball… thirty-nine", not just "thirty-nine".
