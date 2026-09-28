@@ -109,12 +109,22 @@ track = idle face; speech = lip-sync.
 
 ## 6. Align + chroma-key + composite
 
-**A/V sync rule (do this, not the clever thing):** `recv_av` captures the provider's video
-AND audio *already in sync* from the Agora channel — the 15s warmup only lets it start
-publishing. So build the avatar clip with **`compose_native.py`**, which muxes the recorded
-video with the recorded **echo audio**, kept locked by the single captured offset
-(`astart = vstart − audio_offset`). Then overlay using **that clip's own audio**. That's it —
-the mouth and voice are the exact SDK-recorded pair, so they cannot drift.
+**A/V sync rule.** `recv_av` captures the provider's video AND audio *already in sync* from
+the Agora channel (the 15s warmup only lets it start publishing). Two ways to use that:
+
+- **Best for overlays (clean audio + sync):** mux the **clean 24k source** (the timed track),
+  positioned by **envelope cross-correlation of the recorded echo against that source**. The
+  echo is the source as the channel played it, so the cross-correlation offset is *exact*
+  (same content) — `vstart = xcorr_lag(echo, source) + audio_offset`, then trim the video from
+  `vstart` and mux the source from 0. You get pristine 24k audio AND RTC-accurate sync.
+- **Quick fallback (sync, but 16k/clicky):** `compose_native.py` muxes the recorded **echo**
+  audio (`astart = vstart − audio_offset`) and you overlay with that clip's own audio. Simple
+  and always in sync, but the echo carries the channel's Opus/jitter-buffer artifacts —
+  audibly **clicky/poppy** vs the clean source. Only use it when audio quality doesn't matter.
+
+**Never** position the video by single-threshold **onset detection** — an onset caught a few
+ms off pushes the mouth *ahead* of the voice (cost ~190ms on a roulette clip). Cross-correlation
+is exact; onset is not.
 
 ```bash
 # in-sync avatar clip: recorded video + recorded echo audio (compose_native handles the offset)
@@ -138,15 +148,13 @@ Sample the avatar's background colour from a corner first (`ffprobe`/pixel read)
 - **Never put `-ss` on both overlay inputs** — two input-seeks desync the overlay PTS and
   the avatar silently doesn't render. Add `setpts=PTS-STARTPTS` when seeking one input for a
   still test; for the real render feed both from t=0 (no input `-ss`).
-- **A/V sync — carry the RTC-recorded pair; do NOT mux a separate source track and align the
-  video to it.** `recv_av` records the provider's video + audio already in sync from the
-  channel. `compose_native.py` keeps them locked via the one captured `audio_offset`, so the
-  mouth cannot drift. **Muxing the separate 24k source and positioning the video by
-  onset-detection is what drifts** (an onset caught a few ms late pushes the mouth *ahead* of
-  the voice — cost me ~190ms on a roulette clip). The source is crisper (24k vs the echo's
-  16k), but it's only worth it if you accept a precise alignment step (envelope
-  cross-correlation, `compose_src.py`), which is fragile; for overlays, prefer the echo via
-  `compose_native` and use the avatar clip's **own** audio (`-map 1:a`).
+- **A/V sync — mux the clean source, positioned by cross-correlation (NOT onset).** The recorded
+  echo is in sync with the video from the channel but sounds **clicky/poppy** (16k Opus + jitter
+  buffer). Mux the clean 24k **source** instead, and find its position by cross-correlating the
+  echo against the source (exact — same content). Onset-detection positioning is the trap that
+  drifts (~190ms, mouth ahead of voice). The echo (`compose_native`, `-map 1:a`) is the quick
+  in-sync fallback when audio quality doesn't matter, but for anything a viewer listens to,
+  use the clean source.
 - **Multi-avatar mux (one shared audio):** you can't give each tile its own audio, so align
   every tile's video to the shared track by **envelope cross-correlation of its audio against
   the reference tile's audio** (all avatars lip-synced the *same* source, so matching the
