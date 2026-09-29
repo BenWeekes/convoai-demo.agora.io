@@ -155,12 +155,18 @@ Sample the avatar's background colour from a corner first (`ffprobe`/pixel read)
   drifts (~190ms, mouth ahead of voice). The echo (`compose_native`, `-map 1:a`) is the quick
   in-sync fallback when audio quality doesn't matter, but for anything a viewer listens to,
   use the clean source.
-- **Multi-avatar mux (one shared audio):** you can't give each tile its own audio, so align
-  every tile's video to the shared track by **envelope cross-correlation of its audio against
-  the reference tile's audio** (all avatars lip-synced the *same* source, so matching the
-  audio content matches the mouths). This preserves each avatar's RTC sync on the shared
-  track — verify residual lag ≈ 0 for every tile. Single-threshold onset detection is NOT
-  reliable here (providers' onsets varied by 300–800ms).
+- **Multi-avatar mux (one shared audio) — align on SPEECH ONSET, then VERIFY VISUALLY.** You
+  can't give each tile its own audio, so align every tile's video to the shared track. Align by
+  each tile's **first-word speech onset** (fine-grained RMS threshold) relative to the reference
+  tile, and **trim the shared audio by the reference tile's own onset offset** (else every mouth
+  sits ahead of the audio — a ~300ms bug). Then **spot-check each tile's mouth against audio
+  amplitude landmarks**: mouth must be *closed* in a silence and *open* on a loud vowel. Two
+  traps that WILL bite you: (1) **envelope cross-correlation misaligns a tile whose audio has a
+  different envelope shape** — e.g. an exported clip (Trulience `tru*.mp4`) vs channel-recorded
+  providers — by ~0.3s; (2) the **residual-lag self-check is fooled by the repetitive speech
+  envelope** and reports 0ms while the mouth is really 0.3s off. Cross-correlation is only safe
+  between clips with the *same* audio (all channel-recorded from the same source); the visual
+  landmark check is the ground truth.
 - **Cue timing drift**: a long line pushes later lines; keep hype lines tight, or the cold
   read lands after its on-screen graphic.
 - **Ordinal calls read better**: "the second ball… thirty-nine", not just "thirty-nine".
