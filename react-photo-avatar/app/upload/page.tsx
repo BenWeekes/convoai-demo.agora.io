@@ -25,8 +25,10 @@ function UploadPageInner() {
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  // Default to keeping the original background; only an explicit ?matte=true
+  // (force background removal) starts it unchecked, and ?nobg=1 forces keep.
   const [keepBg, setKeepBg] = useState<boolean>(
-    ["1", "true", "yes", "on"].includes(nobg) || matte === "false",
+    matte !== "true" || ["1", "true", "yes", "on"].includes(nobg),
   )
 
   const onFile = (e: React.ChangeEvent<HTMLInputElement>) => {

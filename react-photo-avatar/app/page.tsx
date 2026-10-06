@@ -30,6 +30,10 @@ function HomePageInner() {
   const [talkProfile, setTalkProfile] = useState<string>(
     () => variants[0]?.profile ?? profile,
   )
+  // Avatar aspect ratio (LemonSlice supports square / portrait / landscape).
+  const [aspect, setAspect] = useState<string>(
+    () => params.get("avatar_aspect_ratio") ?? "1x1",
+  )
 
   const [photos, setPhotos] = useState<PhotoMeta[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(initialSelected)
@@ -144,22 +148,42 @@ function HomePageInner() {
               )}
             </div>
 
-            {/* Model switcher — only for demos with MLLM variants (LemonSlice photo) */}
-            {variants.length > 1 && !audiopick && (
-              <label className="w-full flex items-center justify-between gap-3 rounded-2xl border border-white/20 px-4 py-3">
-                <span className="text-sm text-white/70">Model</span>
-                <select
-                  value={talkProfile}
-                  onChange={(e) => setTalkProfile(e.target.value)}
-                  className="bg-transparent text-right text-sm font-medium text-white focus:outline-none"
-                >
-                  {variants.map((v) => (
-                    <option key={v.profile} value={v.profile} className="bg-black text-white">
-                      {v.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
+            {/* Model + Aspect share one row — neither control is wide. Model only
+                shows for demos with MLLM variants; Aspect (LemonSlice square /
+                portrait / landscape) always shows for the photo demos. */}
+            {!audiopick && (
+              <div className="w-full flex items-stretch gap-2">
+                {variants.length > 1 && (
+                  <label className="flex-1 flex items-center justify-between gap-2 rounded-2xl border border-white/20 px-3 py-3">
+                    <span className="text-sm text-white/70">Model</span>
+                    <select
+                      value={talkProfile}
+                      onChange={(e) => setTalkProfile(e.target.value)}
+                      className="bg-transparent text-right text-sm font-medium text-white focus:outline-none"
+                    >
+                      {variants.map((v) => (
+                        <option key={v.profile} value={v.profile} className="bg-black text-white">
+                          {v.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                <label className="flex-1 flex items-center justify-between gap-2 rounded-2xl border border-white/20 px-3 py-3">
+                  <span className="text-sm text-white/70">Aspect</span>
+                  <select
+                    value={aspect}
+                    onChange={(e) => setAspect(e.target.value)}
+                    className="bg-transparent text-right text-sm font-medium text-white focus:outline-none"
+                  >
+                    <option value="1x1" className="bg-black text-white">Square (1:1)</option>
+                    <option value="2x3" className="bg-black text-white">Portrait (2:3)</option>
+                    <option value="9x16" className="bg-black text-white">Portrait tall (9:16)</option>
+                    <option value="16x9" className="bg-black text-white">Landscape (16:9)</option>
+                    <option value="3x2" className="bg-black text-white">Landscape (3:2)</option>
+                  </select>
+                </label>
+              </div>
             )}
 
             {/* Action buttons — single row of three to save vertical space */}
@@ -174,7 +198,7 @@ function HomePageInner() {
                   </Link>
                 ) : (
                   <a
-                    href={avatarTalkUrl(selected, talkProfile)}
+                    href={avatarTalkUrl(selected, talkProfile, { aspect })}
                     className="rounded-2xl bg-white text-black py-4 text-center text-sm sm:text-base font-semibold active:scale-[0.98] transition-transform"
                   >
                     💬 Talk

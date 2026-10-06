@@ -115,6 +115,10 @@ export function VideoAvatarClient() {
   const [enableAvatar, setEnableAvatar] = useState(true);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isShowcase, setIsShowcase] = useState(false);
+  // Horizontal mirror of the avatar video. Some sources come through flipped;
+  // this used to be always-on. Default OFF, toggled in the Settings panel.
+  const [mirrorAvatar, setMirrorAvatar] = useState(false);
+  const mirrorCls = mirrorAvatar ? " -scale-x-100" : "";
 
   // Keep React state in sync when the browser exits fullscreen (Esc, swipe).
   useEffect(() => {
@@ -527,6 +531,8 @@ export function VideoAvatarClient() {
           "turn_detection_prefix_padding_ms",
           "turn_detection_silence_duration_ms",
           "turn_detection_interrupt_duration_ms",
+          "avatar_aspect_ratio",
+          "avatar_edit_image",
         ]) {
           const v = pageParams.get(k);
           if (v) params.append(k, v);
@@ -1055,9 +1061,9 @@ export function VideoAvatarClient() {
                   videoTrack={avatarVideoTrack}
                   state={avatarVideoTrack ? "connected" : "disconnected"}
                   className={
-                    isShowcase
-                      ? "h-full w-full !bg-black !rounded-none -scale-x-100"
-                      : "h-full w-full -scale-x-100"
+                    (isShowcase
+                      ? "h-full w-full !bg-black !rounded-none"
+                      : "h-full w-full") + mirrorCls
                   }
                   useMediaStream={true}
                   objectFit="contain"
@@ -1096,7 +1102,7 @@ export function VideoAvatarClient() {
               <AvatarVideoDisplay
                 videoTrack={avatarVideoTrack}
                 state={avatarVideoTrack ? "connected" : "disconnected"}
-                className="h-full w-full -scale-x-100"
+                className={"h-full w-full" + mirrorCls}
                 useMediaStream={true}
                 objectFit="contain"
                 placeholder={<p className="text-sm text-white/70 animate-pulse">Loading…</p>}
@@ -1151,6 +1157,15 @@ export function VideoAvatarClient() {
         selectedMicId={selectedMic}
         onMicChange={handleMicChange}
       >
+        <label className="flex items-center justify-between gap-3 py-2">
+          <span className="text-sm">Mirror avatar (flip horizontally)</span>
+          <input
+            type="checkbox"
+            checked={mirrorAvatar}
+            onChange={(e) => setMirrorAvatar(e.target.checked)}
+            className="h-4 w-4"
+          />
+        </label>
         {!meetingMode && (
           <SessionInfoPanel
             agentId={sessionAgentId}

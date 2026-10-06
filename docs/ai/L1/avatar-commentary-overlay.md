@@ -167,6 +167,31 @@ Sample the avatar's background colour from a corner first (`ffprobe`/pixel read)
   envelope** and reports 0ms while the mouth is really 0.3s off. Cross-correlation is only safe
   between clips with the *same* audio (all channel-recorded from the same source); the visual
   landmark check is the ground truth.
+- **Time-normalization: stretch by the DRIFT SLOPE, never by onset→offset SPAN.** When tiles
+  render at different playout rates (Proto/HeyGen ~1.6% fast → mouth drifts ahead), stretch each
+  tile's video to the reference. The trap: deriving the stretch from the speech **span**
+  (onset..offset ratio) assumes span differs *only* by rate — but a tile can have a longer span
+  for another reason (e.g. **Tavus rings out a longer tail** while staying perfectly in sync).
+  Span-normalizing that tile *compresses an already-aligned clip* and **introduces** ~0.3s drift
+  (this bit the vendor-grid-mux Tavus tile). Instead, measure the tile-vs-reference **windowed
+  cross-correlation lag across the clip**; the correct stretch is the one that flattens that
+  lag's **slope** (last-third minus first-third ≈ 0), then remove the residual constant offset by
+  shifting the trim. Tiles already in sync land at s≈1.0; only genuinely fast/slow ones move. See
+  `build_mux.py` (scratch) — search s∈[0.99,1.03] minimizing |drift-slope|, then offset-correct.
+- **Best method — PEAK-ANCHORED per-phrase warp (not one global stretch).** Even a correct global
+  stretch leaves *local* phrase drift: a vendor can run ~150ms ahead around ONE phrase (one word,
+  e.g. "Weirdly") then snap back — start and end look synced but the mid mouth is off. Fix by
+  anchoring on the **major audio peaks** (phrase-stressed syllables the mouth follows): detect the
+  prominent RMS peaks (min ~1s spacing, >0.3·max) in the reference tile AND each vendor tile — for
+  the same script they line up 1:1 (~12 peaks for the pp track) — match them in order, then
+  **piecewise-linearly time-warp each vendor's video (trim+setpts concat) so its peaks land on the
+  reference's peak times**, and xstack with the reference's audio. Every vendor's mouth then matches
+  the shared audio at every phrase. Granularity is ~1 video frame (33ms at 30fps) — you cannot get
+  finer than a frame. VERIFY by grabbing the mux frame at a loud reference peak: all mouths should
+  be open together; and compare a warped tile vs the reference at that peak (mouths in the same
+  vowel shape). See `align_peak.py` + `build_mux_peak.py` (scratch). Do NOT verify by warping the
+  tile's audio with per-segment `atempo` — atempo concat drifts and injects spurious peaks; verify
+  on the video/mouth directly.
 - **Cue timing drift**: a long line pushes later lines; keep hype lines tight, or the cold
   read lands after its on-screen graphic.
 - **Ordinal calls read better**: "the second ball… thirty-nine", not just "thirty-nine".

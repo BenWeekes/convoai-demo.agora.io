@@ -372,11 +372,17 @@ function pickGradiumVoice(sex: PhotoMeta["sex"]): string {
 export function avatarTalkUrl(
   meta: PhotoMeta,
   profile: string = DEFAULT_PROFILE,
-  opts: { voiceIdOverride?: string; audiopick?: string } = {},
+  opts: { voiceIdOverride?: string; audiopick?: string; aspect?: string } = {},
 ): string {
   const params = new URLSearchParams({ profile })
   const fixedAvatar = FIXED_AVATAR_PROFILES.has(profile)
-  if (!fixedAvatar && meta.image_url) params.set("avatar_id", meta.image_url)
+  if (!fixedAvatar && meta.image_url) {
+    params.set("avatar_id", meta.image_url)
+    // Aspect ratio (square / portrait / landscape) for the LemonSlice renderer,
+    // and keep the uploaded photo un-cropped (no reframe).
+    if (opts.aspect) params.set("avatar_aspect_ratio", opts.aspect)
+    params.set("avatar_edit_image", "false")
+  }
   if (!fixedAvatar && !PROFILE_OWN_VOICE.has(profile)) {
     // Explicit override (voice picker resolved a clone) always wins,
     // otherwise fall through the existing per-profile fallback chain.
@@ -394,6 +400,7 @@ export function avatarTalkUrl(
   params.set("autoconnect", "true")
   const returnQuery = new URLSearchParams({ profile })
   if (meta.id) returnQuery.set("selected", meta.id)
+  if (opts.aspect) returnQuery.set("avatar_aspect_ratio", opts.aspect)
   // Preserve audiopick so a hangup drops the user back into the same
   // voice-picker flow instead of the default gallery.
   if (opts.audiopick) returnQuery.set("audiopick", opts.audiopick)
