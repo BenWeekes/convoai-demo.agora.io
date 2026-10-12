@@ -194,6 +194,32 @@ Sample the avatar's background colour from a corner first (`ffprobe`/pixel read)
   vowel shape). See `align_peak.py` + `build_mux_peak.py` (scratch). Do NOT verify by warping the
   tile's audio with per-segment `atempo` — atempo concat drifts and injects spurious peaks; verify
   on the video/mouth directly.
+- **Vendor-grid Trulience tile (export-only) — zoom match.** Trulience can't be self-driven; they
+  hand over a 2560×1440 mp4. To match the other tiles' head size in the grid/mux, crop
+  **`crop=1608:1072:471:64`** then `scale=720:480,fps=30`. A looser crop (e.g. near-full-frame
+  2340×1316) leaves the head too small; a tighter one (1290×860) over-zooms. Same crop for EN and ZH.
+- **Chinese tiles use a GREEN heart; English uses RED** (so you can tell the two language builds
+  apart at a glance). The Trulience **zh** export ships a RED heart — recolor red→green (English tile
+  keeps red). Swap R↔G **only inside the lower-chest heart ROI**, applied to the finished 720×480
+  tile (not the 2560 source — the ROI fractions are tuned for the tile), via colorchannelmixer +
+  geq mask + maskedmerge:
+  ```
+  # verified for the tru-zh export (crop+scale fold into the same graph):
+  GEQ="255*gt(Y\,0.73*H)*gt(X\,0.30*W)*lt(X\,0.72*W)*gt(r(X\,Y)-g(X\,Y)\,58)*gt(r(X\,Y)-b(X\,Y)\,45)*gt(r(X\,Y)\,105)"
+  ffmpeg -y -i ~/tru-zh.mp4 -t 30 -filter_complex "\
+   [0:v]crop=1608:1072:471:64,scale=720:480,fps=30,split=3[base][sw][m];\
+   [sw]colorchannelmixer=rr=0:rg=1:rb=0:gr=1:gg=0:gb=0:br=0:bg=0:bb=1[swapped];\
+   [m]format=rgb24,geq=r='$GEQ':g='$GEQ':b='$GEQ'[mask];\
+   [base][swapped][mask]maskedmerge[out]" -map "[out]" -map 0:a -c:a copy zh_green.mp4
+  ```
+  ROI = `Y>0.73·H && X∈[0.30·W,0.72·W] && r−g>58 && r−b>45 && r>105`. The **X center-band is
+  essential** — without it the swap also catches a red background object (bottom-left) and leaves the
+  heart patchy. `Y>0.73` because hearts sit at frac≥0.78 while chins/lips are ≤0.70 (0.60 caught
+  chins). Thresholds are **per-export** — always **VERIFY on an extracted frame** (heart fully green,
+  skin/chin/background clean; or sample the heart-region avg RGB and check G>R): loosen `r−g` if the
+  heart is patchy; narrow `X`, raise `Y`, or tighten `r−g` if skin/background gets caught. Then recopy
+  → `media/zh-2.mp4` and rebuild `zh-mux.mp4`. (Blind map: Vendor 2 = Trulience; see memory
+  `project-chinese-vendor-grid`.)
 - **Cue timing drift**: a long line pushes later lines; keep hype lines tight, or the cold
   read lands after its on-screen graphic.
 - **Ordinal calls read better**: "the second ball… thirty-nine", not just "thirty-nine".
