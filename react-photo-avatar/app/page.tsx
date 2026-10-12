@@ -11,6 +11,8 @@ import {
   listPhotos,
   modelVariants,
   normalizeProfile,
+  parseVariantValue,
+  variantValue,
   type PhotoMeta,
 } from "@/lib/photo"
 
@@ -28,7 +30,7 @@ function HomePageInner() {
   // uploaded photo; only the MLLM vendor differs. Empty for other demos.
   const variants = modelVariants(profile)
   const [talkProfile, setTalkProfile] = useState<string>(
-    () => variants[0]?.profile ?? profile,
+    () => (variants[0] ? variantValue(variants[0]) : profile),
   )
   // Avatar aspect ratio (LemonSlice supports square / portrait / landscape).
   const [aspect, setAspect] = useState<string>(
@@ -162,7 +164,7 @@ function HomePageInner() {
                       className="bg-transparent text-right text-sm font-medium text-white focus:outline-none"
                     >
                       {variants.map((v) => (
-                        <option key={v.profile} value={v.profile} className="bg-black text-white">
+                        <option key={variantValue(v)} value={variantValue(v)} className="bg-black text-white">
                           {v.label}
                         </option>
                       ))}
@@ -198,7 +200,7 @@ function HomePageInner() {
                   </Link>
                 ) : (
                   <a
-                    href={avatarTalkUrl(selected, talkProfile, { aspect })}
+                    href={(() => { const { profile: p, mode } = parseVariantValue(talkProfile); return avatarTalkUrl(selected, p, { aspect, mode }) })()}
                     className="rounded-2xl bg-white text-black py-4 text-center text-sm sm:text-base font-semibold active:scale-[0.98] transition-transform"
                   >
                     💬 Talk

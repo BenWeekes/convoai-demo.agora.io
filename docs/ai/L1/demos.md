@@ -13,6 +13,8 @@ Each demo's URL, what it is, its repo, and where the detail lives.
 | EDT luma | `/edt`, `/edt-gemini` | 3D air-fryer viewer via MCP `set_scene` | `web/edt-mcp-node`, luma client |
 | **Avatar grid** | `/avatar-overlay/avatar-grid.html` | Four avatar providers (Tavus, LemonSlice, Anam, Protoface) lip-syncing the **same** audio, driven **directly** (no ConvoAI) with a fixed WAV | `avatar-direct/README.md`; sizing/aspect capabilities: `avatar-provider-sizing.md` |
 | **Avatar commentary** | `/avatar-overlay/lotto-gina.html`, `…lotto-gina-v2.html` | Avatar ("Gina") commentates over a lotto video — timed personality commentary, chroma-keyed into the corner | `avatar-commentary-overlay.md` |
+| **Quiz Wheel (LemonSlice)** | `/avatar-overlay/quiz/` | Voice-driven trivia wheel (points, LinkedIn-safe); ConvoAI gemini + LemonSlice avatar chroma-keyed (`chroma.js`, `?sim=&smooth=&spill=`) over the wheel; quiz-mcp is source of truth | `quiz-wheel.md`; `avatar-overlay public/quiz`; MCP `web/quiz/mcp` |
+| **Quiz Wheel (Trulience)** | `/avatar-overlay/quiz-trl/` | Same game, Trulience VBA avatar via **manual** Agora integration (our client owns mic + agent-audio→setMediaStream); engine ChromaKey (`?key=&sim=`); right/wrong gestures; debug `?hud` | `quiz-wheel.md`; `avatar-overlay public/quiz-trl`; ref `agora-trulience-sdk` |
 | Others | `/photo`, `/dealer/`, `/news/`, `/benchmark/`, `/create` (palabra) | see deploy.md | `web/*` |
 
 Landing page (`/`) lists the headline demos: `/var/www/landing/index.html` (root-owned, **not** in git).

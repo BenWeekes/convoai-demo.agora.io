@@ -339,14 +339,24 @@ const GRADIUM_PROFILES = new Set(["GRADIUMDEMO"])
 // Model switch for the LemonSlice photo demo: same avatar (the uploaded photo),
 // different realtime MLLM vendor. Each variant is a distinct backend profile
 // that shares EVENTDEMO's LemonSlice avatar config and only swaps the MLLM.
-export type ModelVariant = { label: string; profile: string }
+export type ModelVariant = { label: string; profile: string; mode?: "mic" }
 export const MODEL_VARIANTS: Record<string, ModelVariant[]> = {
   EVENTDEMO: [
     { label: "Gemini Live", profile: "EVENTDEMO" },
     { label: "GPT Live", profile: "EVENTDEMO_GPT" },
     { label: "GPT Realtime", profile: "EVENTDEMO_GPTRT" },
     { label: "Grok · xAI", profile: "EVENTDEMO_XAI" },
+    // Your own voice — publish mic, bridge it straight to the avatar (no LLM).
+    { label: "My voice (Mic)", profile: "EVENTDEMO", mode: "mic" },
   ],
+}
+// Dropdown value encodes mode so two entries can share a profile (Gemini + Mic).
+export function variantValue(v: ModelVariant): string {
+  return v.mode ? `${v.profile}:${v.mode}` : v.profile
+}
+export function parseVariantValue(val: string): { profile: string; mode?: "mic" } {
+  const [profile, mode] = val.split(":")
+  return mode === "mic" ? { profile, mode: "mic" } : { profile }
 }
 export function modelVariants(profile: string): ModelVariant[] {
   return MODEL_VARIANTS[profile] ?? []
@@ -372,7 +382,7 @@ function pickGradiumVoice(sex: PhotoMeta["sex"]): string {
 export function avatarTalkUrl(
   meta: PhotoMeta,
   profile: string = DEFAULT_PROFILE,
-  opts: { voiceIdOverride?: string; audiopick?: string; aspect?: string } = {},
+  opts: { voiceIdOverride?: string; audiopick?: string; aspect?: string; mode?: "mic" } = {},
 ): string {
   const params = new URLSearchParams({ profile })
   const fixedAvatar = FIXED_AVATAR_PROFILES.has(profile)
@@ -382,6 +392,16 @@ export function avatarTalkUrl(
     // and keep the uploaded photo un-cropped (no reframe).
     if (opts.aspect) params.set("avatar_aspect_ratio", opts.aspect)
     params.set("avatar_edit_image", "false")
+  }
+  // Mic mode: publish your voice straight to the avatar (no LLM/voice/prompt).
+  if (opts.mode === "mic") {
+    params.set("mode", "mic")
+    params.set("autoconnect", "true")
+    const rq = new URLSearchParams({ profile })
+    if (meta.id) rq.set("selected", meta.id)
+    if (opts.aspect) rq.set("avatar_aspect_ratio", opts.aspect)
+    params.set("returnurl", `${PHOTO_BASE || "/"}?${rq.toString()}`)
+    return `${AVATAR_APP}?${params.toString()}`
   }
   if (!fixedAvatar && !PROFILE_OWN_VOICE.has(profile)) {
     // Explicit override (voice picker resolved a clone) always wins,

@@ -47,6 +47,8 @@ Re-sample a tight window at `fps=1` (crop to the region of interest) to pin fast
 
 ## 3. Voice it — CLEAN audio (this is what removes crackle)
 
+- **"Gina" voice = ElevenLabs voice id `V0cljQmo7wpx8LTdbqfJ`** (not literally named "Gina" in
+  the account — this is the one used for the Gina/lotto demos; key = `VIDEO_TTS_KEY` / `PHOTO_TTS_KEY`).
 - Request **raw PCM**, never MP3: `output_format=pcm_24000` (MP3 128k adds crackle on
   sibilants). Then apply a limiter for headroom:
   `ffmpeg -f s16le -ar 24000 -ac 1 -i in.raw -af "alimiter=level_in=1:level_out=0.84:limit=0.97:attack=5:release=50" out.wav`

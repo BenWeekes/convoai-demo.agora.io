@@ -164,6 +164,10 @@ export function VideoAvatarClient() {
   const [authUser, setAuthUser] = useState<string | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [meetingMode, setMeetingMode] = useState(false);
+  // Mic mode: publish your voice straight to the avatar via the puppet bridge
+  // (no ConvoAI / LLM). One channel; the ui-kit subscribes to the avatar as usual.
+  const [micMode, setMicMode] = useState(false);
+  const micSessionRef = useRef<string | null>(null);
   const [meetingParticipantRole, setMeetingParticipantRole] = useState<
     "host" | "guest" | null
   >(null);
@@ -205,6 +209,9 @@ export function VideoAvatarClient() {
       }
       if (params.get("meeting_mode") === "true") {
         setMeetingMode(true);
+      }
+      if (params.get("mode") === "mic") {
+        setMicMode(true);
       }
       const meetingAccessToken = params.get("access_token");
       if (meetingAccessToken) {
@@ -436,6 +443,39 @@ export function VideoAvatarClient() {
     }
     setIsLoading(true);
     try {
+      if (micMode) {
+        // Start the direct mic->avatar bridge (puppet service), then join the
+        // ONE channel: the ui-kit publishes our mic and subscribes to the avatar.
+        const mp = new URLSearchParams();
+        if (avatarIdOverride) mp.append("avatar_id", avatarIdOverride);
+        const asp =
+          typeof window !== "undefined"
+            ? new URLSearchParams(window.location.search).get("avatar_aspect_ratio")
+            : null;
+        if (asp) mp.append("avatar_aspect_ratio", asp);
+        const micResp = await fetch(`/puppet/start-mic?${mp.toString()}`, {
+          method: "POST",
+        });
+        if (!micResp.ok) {
+          const e = await micResp.json().catch(() => ({}));
+          throw new Error(e.error || `Mic start failed: ${micResp.statusText}`);
+        }
+        const d = await micResp.json();
+        micSessionRef.current = d.sessionId;
+        channelRef.current = d.channel;
+        await joinChannel({
+          appId: d.appId,
+          channel: d.channel,
+          token: d.token || null,
+          uid: parseInt(String(d.uid), 10),
+          participantRole: "guest",
+          agentUid: String(d.avatarUid),
+          mode: "avatar",
+          ...(selectedMic ? { microphoneId: selectedMic } : {}),
+        });
+        return;
+      }
+
       if (meetingMode) {
         const joinResponse = await fetch(`${backendUrl}/join-meeting`, {
           method: "POST",
@@ -638,7 +678,21 @@ export function VideoAvatarClient() {
       setIsLocalVideoActive(false);
     }
 
-    if (meetingMode) {
+    if (micMode) {
+      // End the direct mic->avatar bridge (stops the LemonSlice session).
+      if (micSessionRef.current) {
+        try {
+          await fetch(`/puppet/stop`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sessionId: micSessionRef.current }),
+          });
+        } catch (e) {
+          console.error("Mic stop failed:", e);
+        }
+        micSessionRef.current = null;
+      }
+    } else if (meetingMode) {
       await fetch(`${backendUrl}/meeting-participant-event`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
