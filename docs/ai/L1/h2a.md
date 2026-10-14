@@ -43,7 +43,10 @@ Reuses simple-backend photo store under profile **`H2A`**:
 - Files land in `web/uploads/H2A/`, served at `/photo-uploads/H2A/`. The chosen `image_url` is the
   LemonSlice `avatar_id`.
 
-## Noise removal (two points, pluggable — dropdown Agora / RNNoise / Both / Off)
+## Noise removal (two points, pluggable)
+
+UI dropdown shows neutral labels (no vendor names): **Client** (= Agora AI Denoiser, browser) /
+**Server** (= RNNoise) / **Both** / **Off**.
 
 1. **Agora AI Denoiser** (client, browser) — `agora-extension-ai-denoiser@2.0.2` (ES module from
    jsdelivr, `assetsPath` = its `/external` WASM dir); `track.pipe(proc).pipe(track.processorDestination)`.
