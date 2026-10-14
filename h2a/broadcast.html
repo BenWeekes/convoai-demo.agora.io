@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Human to Avatar — Broadcast</title>
+<script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.23.0.js"></script>
+<script src="/h2a/agora-rtm.js"></script>
+<style>
+  :root{color-scheme:dark;}*{box-sizing:border-box;}html,body{margin:0;}
+  body{background:#0d0d0f;min-height:100vh;color:#eee;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+       display:flex;flex-direction:column;align-items:center;gap:16px;padding:22px 14px;}
+  h1{font-size:20px;margin:0;font-weight:700;}
+  .sub{color:#9aa;font-size:13px;margin:0;max-width:620px;text-align:center;}
+  .panel{width:100%;max-width:680px;background:#141418;border:1px solid #26262c;border-radius:14px;padding:16px;}
+  .lbl{font-size:12px;color:#8a8a96;text-transform:uppercase;letter-spacing:1px;margin:0 0 8px;}
+  .gallery{display:flex;flex-wrap:wrap;gap:10px;}
+  .tile{position:relative;width:92px;height:122px;border-radius:9px;overflow:hidden;border:2px solid transparent;cursor:pointer;background:#000;}
+  .tile.on{border-color:#4a7dff;}
+  .tile img{width:100%;height:100%;object-fit:cover;}
+  .tile .del{position:absolute;top:3px;right:3px;background:rgba(0,0,0,.65);border:0;color:#fff;border-radius:6px;font-size:11px;padding:3px 6px;cursor:pointer;}
+  .tile.add{display:flex;align-items:center;justify-content:center;border:2px dashed #3a3a44;color:#9aa;font-size:13px;text-align:center;}
+  .row{display:flex;flex-wrap:wrap;gap:16px;align-items:center;}
+  .opt{display:flex;flex-direction:column;gap:6px;}
+  select,input[type=text]{background:#101014;color:#eee;border:1px solid #33333b;border-radius:8px;padding:9px;font-size:14px;}
+  button{border:0;border-radius:10px;padding:12px 24px;font-weight:700;font-size:15px;cursor:pointer;background:#4a7dff;color:#fff;}
+  button.sec{background:#26262c;}button.stop{background:#c23b3b;}button:disabled{opacity:.45;cursor:default;}
+  .live{display:none;flex-direction:column;align-items:center;gap:14px;width:100%;max-width:680px;}
+  #self{width:100%;max-width:360px;background:#000;border-radius:12px;overflow:hidden;aspect-ratio:2/3;}
+  #self video{width:100%;height:100%;object-fit:cover;}
+  .share{width:100%;background:#101014;border:1px solid #2a2a30;border-radius:10px;padding:10px 12px;}
+  .meter{width:220px;height:10px;background:#17171b;border:1px solid #2a2a30;border-radius:6px;overflow:hidden;}
+  .meter > div{height:100%;width:0;background:linear-gradient(90deg,#4a7dff,#5fd08a);}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#5fd08a;margin-right:6px;animation:pulse 1.2s infinite;}
+  @keyframes pulse{50%{opacity:.3;}}
+  .msg{font-size:13px;color:#ff9a9a;min-height:16px;text-align:center;}
+  .stat{font-size:13px;color:#9aa;}
+</style></head>
+<body>
+  <h1>Human to Avatar — Broadcast</h1>
+  <p class="sub">Your voice drives a LemonSlice avatar in real time. Pick a photo, go live, and share the watch link.</p>
+
+  <div id="setup">
+    <div class="panel">
+      <p class="lbl">Avatar photo</p>
+      <div class="gallery" id="gallery"></div>
+      <input type="file" id="file" accept="image/*" style="display:none;">
+    </div>
+    <div class="panel">
+      <div class="row">
+        <div class="opt"><span class="lbl">Aspect</span>
+          <select id="aspect">
+            <option value="2x3">Portrait 2:3</option>
+            <option value="1x1">Square 1:1</option>
+            <option value="16x9">Landscape 16:9</option>
+          </select>
+        </div>
+        <div class="opt"><span class="lbl">Noise removal</span>
+          <select id="noise">
+            <option value="agora">Agora (browser)</option>
+            <option value="rnnoise">RNNoise (server)</option>
+            <option value="both">Both</option>
+            <option value="off">Off</option>
+          </select>
+        </div>
+        <div class="opt"><span class="lbl">&nbsp;</span>
+          <button id="go" disabled>Go live</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="live" id="livebox">
+    <div><span class="dot"></span><b>You are live</b></div>
+    <div id="self"></div>
+    <div class="meter"><div id="lvl"></div></div>
+    <div class="share"><span class="lbl">Watch link — share this</span>
+      <input type="text" id="watch" readonly onclick="this.select()"></div>
+    <div class="stat" id="count">Viewers: 0</div>
+    <div class="row" style="justify-content:center;">
+      <button id="mute" class="sec">Mute mic</button>
+      <button id="spk" class="sec">Enable speaker</button>
+      <button id="end" class="stop">End broadcast</button>
+    </div>
+    <div class="stat" id="note"></div>
+  </div>
+  <div class="msg" id="msg"></div>
+
+<script>
+  const PUPPET="/puppet", BE="/simple-backend", PROFILE="H2A";
+  const $=id=>document.getElementById(id);
+  const msg=t=>$('msg').textContent=t||'';
+  const L=(...a)=>{ try{console.log("[h2a]",...a);}catch(e){} };
+  let picked=null, client=null, mic=null, rtm=null, sess=null, meterIv=null, countIv=null;
+  let speaking=false, avVideo=null, avAudio=null, spkOn=false, muted=false;
+
+  /* ---------- gallery ---------- */
+  async function loadGallery(){
+    let items=[];
+    try{ const d=await (await fetch(`${BE}/photos?profile=${PROFILE}&limit=24`)).json();
+      items=(d.photos||d.items||d||[]).filter(x=>x&&(x.image_url||x.url)); }catch(e){ L("gallery err",e.message); }
+    const g=$('gallery'); g.innerHTML='';
+    items.forEach(it=>{
+      const url=it.image_url||it.url, id=it.id, isDef=it.is_default||id==='default';
+      const t=document.createElement('div'); t.className='tile'; t.dataset.url=url; t.dataset.id=id||'';
+      t.innerHTML=`<img src="${url}" alt="">`+((id&&!isDef)?`<button class="del" title="Delete">Delete</button>`:``);
+      t.querySelector('img').onclick=()=>select(t);
+      const del=t.querySelector('.del'); if(del) del.onclick=(e)=>{ e.stopPropagation(); removePhoto(id); };
+      g.append(t);
+    });
+    const add=document.createElement('div'); add.className='tile add'; add.textContent='+ Upload photo';
+    add.onclick=()=>$('file').click(); g.append(add);
+  }
+  function select(tile){
+    [...$('gallery').children].forEach(c=>c.classList.remove('on'));
+    tile.classList.add('on'); picked=tile.dataset.url; $('go').disabled=false;
+  }
+  $('file').onchange=async()=>{
+    const f=$('file').files[0]; if(!f) return;
+    msg('Uploading…');
+    try{ const fd=new FormData(); fd.append('photo',f);
+      const d=await (await fetch(`${BE}/upload-photo?profile=${PROFILE}&crop=true`,{method:'POST',body:fd})).json();
+      if(d.error) throw new Error(d.error);
+      msg(''); await loadGallery();
+      const t=[...$('gallery').children].find(c=>c.dataset.url===(d.image_url||d.url)); if(t) select(t);
+    }catch(e){ msg('Upload failed: '+(e.message||e)); }
+    $('file').value='';
+  };
+  async function removePhoto(id){
+    if(!id) return;
+    try{ await fetch(`${BE}/photo/${encodeURIComponent(id)}?profile=${PROFILE}`,{method:'DELETE'}); }catch(e){}
+    await loadGallery();
+  }
+
+  /* ---------- Agora AI Denoiser (best-effort, browser) ---------- */
+  async function applyAgoraDenoiser(track){
+    try{
+      const V="2.0.2";
+      const mod=await import(`https://cdn.jsdelivr.net/npm/agora-extension-ai-denoiser@${V}/index.es.js`);
+      const Ext=mod.AIDenoiserExtension||mod.default;
+      const ext=new Ext({assetsPath:`https://cdn.jsdelivr.net/npm/agora-extension-ai-denoiser@${V}/external`});
+      AgoraRTC.registerExtensions([ext]);
+      const proc=ext.createProcessor();
+      track.pipe(proc).pipe(track.processorDestination);
+      await proc.enable();
+      L("agora denoiser enabled"); return true;
+    }catch(e){ L("agora denoiser failed",e.message); return false; }
+  }
+
+  /* ---------- go live ---------- */
+  $('go').onclick=async()=>{
+    if(!picked) return;
+    $('go').disabled=true; msg('Starting…');
+    const aspect=$('aspect').value, noise=$('noise').value;
+    try{
+      // server-side RNNoise when selected; browser Agora denoiser applied client-side below
+      const serverDenoise=(noise==='rnnoise'||noise==='both')?'rnnoise':'';
+      const d=await (await fetch(`${PUPPET}/start-mic?avatar_id=${encodeURIComponent(picked)}&avatar_aspect_ratio=${aspect}&denoise=${serverDenoise}`,{method:'POST'})).json();
+      if(!d.channel) throw new Error(d.error||'start failed');
+      sess=d;
+      client=AgoraRTC.createClient({mode:"rtc",codec:"vp8"});
+      // avatar subscribe: video -> self-view; audio -> kept but NOT played (speaker off = no echo)
+      client.on("user-published",async(user,mt)=>{
+        if(String(user.uid)!==String(d.avatarUid)) return;
+        await client.subscribe(user,mt);
+        if(mt==="video"){ avVideo=user.videoTrack; avVideo.play("self"); }
+        if(mt==="audio"){ avAudio=user.audioTrack; if(spkOn) avAudio.play(); }
+      });
+      await client.join(d.appId,d.channel,d.token,d.uid);
+      mic=await AgoraRTC.createMicrophoneAudioTrack();
+      if(noise==='agora'||noise==='both'){ const ok=await applyAgoraDenoiser(mic); if(!ok&&noise==='agora') $('note').textContent='Agora denoiser unavailable in this browser — try RNNoise (server).'; }
+      await client.publish([mic]);
+      // adjust self-view aspect
+      $('self').style.aspectRatio = aspect==='1x1'?'1/1':aspect==='16x9'?'16/9':'2/3';
+      $('watch').value=location.origin+d.watchPath;
+      $('setup').style.display='none'; $('livebox').style.display='flex'; msg('');
+      meterIv=setInterval(()=>{ const v=mic?mic.getVolumeLevel():0; $('lvl').style.width=Math.min(100,Math.round(v*160))+'%'; },120);
+      startRtm(d);
+    }catch(e){ msg('Error: '+(e.message||e)); $('go').disabled=false; }
+  };
+
+  /* ---------- RTM viewer count (presence) ---------- */
+  async function startRtm(d){
+    try{
+      rtm=new AgoraRTM.RTM(d.appId,String(d.uid),{logLevel:'error'});
+      await rtm.login({token:d.token});
+      await rtm.subscribe(d.channel,{withPresence:true,withMessage:false});
+      const refresh=async()=>{ try{
+        const r=await rtm.presence.getOnlineUsers(d.channel,'MESSAGE');
+        const n=(r.totalOccupancy!=null?r.totalOccupancy:(r.occupancy!=null?r.occupancy:((r.occupants||[]).length)));
+        $('count').textContent='Viewers: '+Math.max(0,(n||1)-1);  // minus the broadcaster
+      }catch(e){ L("presence err",e.message); } };
+      refresh(); countIv=setInterval(refresh,3000);
+      rtm.addEventListener('presence',()=>refresh());
+    }catch(e){ L("rtm err",e.message); $('count').textContent=''; }
+  }
+
+  /* ---------- controls ---------- */
+  $('mute').onclick=async()=>{ if(!mic) return; muted=!muted; try{await mic.setMuted(muted);}catch(e){}
+    $('mute').textContent=muted?'Unmute mic':'Mute mic'; };
+  $('spk').onclick=()=>{ spkOn=!spkOn;
+    try{ if(spkOn){ if(avAudio) avAudio.play(); } else { if(avAudio) avAudio.stop(); } }catch(e){}
+    $('spk').textContent=spkOn?'Disable speaker':'Enable speaker';
+    $('note').textContent=spkOn?'Speaker on — you may hear echo of your own voice.':''; };
+  async function endBroadcast(beacon){
+    try{ if(sess&&sess.channel){ const u=`${PUPPET}/stop`; const body=JSON.stringify({sessionId:sess.sessionId});
+      if(beacon&&navigator.sendBeacon) navigator.sendBeacon(u,new Blob([body],{type:'application/json'}));
+      else await fetch(u,{method:'POST',headers:{'content-type':'application/json'},body}); } }catch(e){}
+    try{ if(mic) mic.close(); }catch(e){}
+    try{ if(client) await client.leave(); }catch(e){}
+    try{ if(rtm){ await rtm.logout(); } }catch(e){}
+    clearInterval(meterIv); clearInterval(countIv);
+  }
+  $('end').onclick=async()=>{ $('end').disabled=true; await endBroadcast(false); location.reload(); };
+  // auto-end when the broadcaster closes the tab
+  window.addEventListener('pagehide',()=>endBroadcast(true));
+  window.addEventListener('beforeunload',()=>endBroadcast(true));
+
+  loadGallery();
+</script>
+</body></html>

@@ -16,7 +16,7 @@ Client apps live in their own repos and are cloned/built per `deploy.md`:
 2. `docs/ai/L1/*` — the navigable map:
    - `services-and-routes.md` — every pm2 app → port → nginx route → source.
    - `demos.md` — each user-facing demo → URL → what it is → repo → deploy.md section.
-   - `baccarat.md`, `signer-overlay.md`, `quiz-wheel.md`, `vendor-grid.md` — per-demo deep dives.
+   - `baccarat.md`, `signer-overlay.md`, `quiz-wheel.md`, `vendor-grid.md`, `h2a.md` — per-demo deep dives.
    - `rebuild.md` — order of operations to rebuild from scratch.
 
 ## Secrets

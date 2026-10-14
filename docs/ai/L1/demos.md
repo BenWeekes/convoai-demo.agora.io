@@ -16,6 +16,7 @@ Each demo's URL, what it is, its repo, and where the detail lives.
 | **Avatar comparison (blind)** | `/avatar-compare/english-grid/`, `…/chinese-grid/`, `…/english-vote/`, `…/chinese-vote/` | Blind 6-vendor head-avatar comparison (grids + 3×2 mux polls), EN + ZH; Vendor 1–6 = Tavus/Trulience/Anam/Protoface/HeyGen/LemonSlice | `vendor-grid.md` (build/refresh process); deploy.md |
 | **Quiz Wheel (LemonSlice)** | `/avatar-overlay/quiz/` | Voice-driven trivia wheel (points, LinkedIn-safe); ConvoAI gemini + LemonSlice avatar chroma-keyed (`chroma.js`, `?sim=&smooth=&spill=`) over the wheel; quiz-mcp is source of truth | `quiz-wheel.md`; `avatar-overlay public/quiz`; MCP `web/quiz/mcp` |
 | **Quiz Wheel (Trulience)** | `/avatar-overlay/quiz-trl/` | Same game, Trulience VBA avatar via **manual** Agora integration (our client owns mic + agent-audio→setMediaStream); engine ChromaKey (`?key=&sim=`); right/wrong gestures; debug `?hud` | `quiz-wheel.md`; `avatar-overlay public/quiz-trl`; ref `agora-trulience-sdk` |
+| **Human to Avatar (h2a)** | `/h2a/broadcast` (+ `/h2a/watch?channel=…`) | Live voice-driven LemonSlice avatar broadcast: upload a photo, go live, share a watch link; viewers see the avatar + hear your voice. RTM viewer count; Agora/RNNoise denoise; broadcaster-owned lifecycle | `h2a.md`; service `web/puppet` (pm2 `puppet`) |
 | Others | `/photo`, `/dealer/`, `/news/`, `/benchmark/`, `/create` (palabra) | see deploy.md | `web/*` |
 
 Landing page (`/`) lists the headline demos: `/var/www/landing/index.html` (root-owned, **not** in git).

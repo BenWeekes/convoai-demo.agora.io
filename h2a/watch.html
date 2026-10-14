@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Human to Avatar — Watch</title>
+<script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.23.0.js"></script>
+<script src="/h2a/agora-rtm.js"></script>
+<style>
+  :root{color-scheme:dark;}*{box-sizing:border-box;}html,body{margin:0;height:100%;}
+  body{background:#0d0d0f;height:100vh;color:#eee;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+       display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:12px;}
+  #video{width:100%;max-width:460px;aspect-ratio:2/3;max-height:70vh;background:#000;border-radius:12px;overflow:hidden;}
+  #video video{width:100%;height:100%;object-fit:cover;}
+  .msg{color:#9aa;font-size:14px;min-height:18px;text-align:center;}
+  .stat{color:#9aa;font-size:13px;}
+  button{border:0;border-radius:10px;padding:13px 28px;font-weight:700;font-size:15px;cursor:pointer;background:#4a7dff;color:#fff;}
+  button.sec{background:#26262c;}button:disabled{opacity:.45;cursor:default;}
+</style></head>
+<body>
+  <div id="video"></div>
+  <div class="stat" id="count"></div>
+  <div class="msg" id="msg">Press Watch to join the broadcast.</div>
+  <button id="join">Watch</button>
+  <button id="spk" class="sec" style="display:none;">Mute speaker</button>
+<script>
+  const PUPPET="/puppet";
+  const $=id=>document.getElementById(id);
+  const msg=t=>$('msg').textContent=t||'';
+  const L=(...a)=>{ try{console.log("[h2a-watch]",...a);}catch(e){} };
+  const ch=new URLSearchParams(location.search).get('channel')||'';
+  let client=null, rtm=null, avAudio=null, spkOn=true, countIv=null, avatarUid=102;
+  if(!ch){ msg('Missing ?channel='); $('join').style.display='none'; }
+
+  async function startRtm(d){
+    try{
+      rtm=new AgoraRTM.RTM(d.appId,String(d.uid),{logLevel:'error'});
+      await rtm.login({token:d.token});
+      await rtm.subscribe(ch,{withPresence:true,withMessage:false});
+      const refresh=async()=>{ try{
+        const r=await rtm.presence.getOnlineUsers(ch,'MESSAGE');
+        const n=(r.totalOccupancy!=null?r.totalOccupancy:(r.occupancy!=null?r.occupancy:((r.occupants||[]).length)));
+        $('count').textContent=Math.max(0,(n||1)-1)+' watching';  // minus the broadcaster
+      }catch(e){} };
+      refresh(); countIv=setInterval(refresh,4000);
+      rtm.addEventListener('presence',()=>refresh());
+    }catch(e){ L("rtm err",e.message); }
+  }
+
+  $('join').onclick=async()=>{
+    $('join').disabled=true; msg('Connecting…');
+    try{
+      const d=await (await fetch(`${PUPPET}/token?channel=${encodeURIComponent(ch)}&role=viewer`)).json();
+      if(!d.token) throw new Error(d.error||'no token');
+      avatarUid=d.avatarUid;
+      client=AgoraRTC.createClient({mode:"rtc",codec:"vp8"});
+      client.on("user-published",async(user,mt)=>{
+        if(String(user.uid)!==String(avatarUid)) return;
+        await client.subscribe(user,mt);
+        if(mt==="video"){ user.videoTrack.play("video"); msg(''); }
+        if(mt==="audio"){ avAudio=user.audioTrack; if(spkOn) avAudio.play(); }
+      });
+      client.on("user-unpublished",(user,mt)=>{ if(String(user.uid)===String(avatarUid)&&mt==="video") msg('Broadcaster paused…'); });
+      await client.join(d.appId,ch,d.token,d.uid);
+      $('join').style.display='none'; $('spk').style.display='';
+      msg('Waiting for the avatar…');
+      startRtm(d);
+    }catch(e){ msg('Error: '+(e.message||e)); $('join').disabled=false; }
+  };
+  $('spk').onclick=()=>{ spkOn=!spkOn;
+    try{ if(spkOn){ if(avAudio) avAudio.play(); } else { if(avAudio) avAudio.stop(); } }catch(e){}
+    $('spk').textContent=spkOn?'Mute speaker':'Unmute speaker'; };
+  window.addEventListener('pagehide',()=>{ try{ if(rtm) rtm.logout(); if(client) client.leave(); }catch(e){} });
+</script>
+</body></html>
