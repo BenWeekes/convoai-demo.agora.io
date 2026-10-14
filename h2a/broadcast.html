@@ -99,7 +99,7 @@
   async function loadGallery(){
     let items=[];
     try{ const d=await (await fetch(`${BE}/photos?profile=${PROFILE}&limit=24`)).json();
-      items=(d.photos||d.items||d||[]).filter(x=>x&&(x.image_url||x.url)); }catch(e){ L("gallery err",e.message); }
+      items=(d.photos||d.items||d||[]).filter(x=>x&&(x.image_url||x.url)&&!(x.is_default||x.id==='default')); }catch(e){ L("gallery err",e.message); }
     const g=$('gallery'); g.innerHTML='';
     items.forEach(it=>{
       const url=it.image_url||it.url, id=it.id, isDef=it.is_default||id==='default';

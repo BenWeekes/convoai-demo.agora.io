@@ -38,7 +38,8 @@ Running copy: `/home/ubuntu/puppet/`. **Tracked source: `web/puppet/`** (keep in
 Reuses simple-backend photo store under profile **`H2A`**:
 - Upload: `POST /simple-backend/upload-photo?profile=H2A` (multipart `photo`) → `{id, image_url}`.
 - List: `GET /simple-backend/photos?profile=H2A` → array of `{id, image_url, is_default}` (the
-  curated default seed is always appended; don't offer Delete on it).
+  curated default seed is always appended by the backend; `broadcast.html` **filters it out** of the
+  gallery — `!(x.is_default||x.id==='default')` — so only user uploads + the "+ Upload photo" tile show).
 - Delete: `DELETE /simple-backend/photo/<id>?profile=H2A`.
 - Files land in `web/uploads/H2A/`, served at `/photo-uploads/H2A/`. The chosen `image_url` is the
   LemonSlice `avatar_id`.
@@ -71,4 +72,6 @@ location = /avatar-overlay/puppet-watch.html { return 301 /h2a/watch$is_args$arg
 
 `broadcast.html` (gallery/upload/delete, aspect, noise dropdown, go-live, self-view, share URL, RTM
 count, Mute mic / Enable speaker / End — text-only buttons, no icons) + `watch.html` (join, play,
-Mute/Unmute speaker, count) + `agora-rtm.js` (RTM 2.2.4). AgoraRTC 4.23.0 from Agora CDN.
+**Mute speaker + Leave on one flex row**, count) + `agora-rtm.js` (RTM 2.2.4). AgoraRTC 4.23.0 from
+Agora CDN. Viewer **Leave** tears down (stop audio, `client.leave`, `rtm.logout`, clear count) and
+restores the initial "Press Watch to join" screen — no page nav.

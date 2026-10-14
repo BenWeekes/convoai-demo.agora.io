@@ -14,13 +14,17 @@
   .stat{color:#9aa;font-size:13px;}
   button{border:0;border-radius:10px;padding:13px 28px;font-weight:700;font-size:15px;cursor:pointer;background:#4a7dff;color:#fff;}
   button.sec{background:#26262c;}button:disabled{opacity:.45;cursor:default;}
+  .row{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;}
 </style></head>
 <body>
   <div id="video"></div>
   <div class="stat" id="count"></div>
   <div class="msg" id="msg">Press Watch to join the broadcast.</div>
   <button id="join">Watch</button>
-  <button id="spk" class="sec" style="display:none;">Mute speaker</button>
+  <div class="row">
+    <button id="spk" class="sec" style="display:none;">Mute speaker</button>
+    <button id="leave" class="sec" style="display:none;">Leave</button>
+  </div>
 <script>
   const PUPPET="/puppet";
   const $=id=>document.getElementById(id);
@@ -60,7 +64,7 @@
       });
       client.on("user-unpublished",(user,mt)=>{ if(String(user.uid)===String(avatarUid)&&mt==="video") msg('Broadcaster paused…'); });
       await client.join(d.appId,ch,d.token,d.uid);
-      $('join').style.display='none'; $('spk').style.display='';
+      $('join').style.display='none'; $('spk').style.display=''; $('leave').style.display='';
       msg('Waiting for the avatar…');
       startRtm(d);
     }catch(e){ msg('Error: '+(e.message||e)); $('join').disabled=false; }
@@ -68,6 +72,21 @@
   $('spk').onclick=()=>{ spkOn=!spkOn;
     try{ if(spkOn){ if(avAudio) avAudio.play(); } else { if(avAudio) avAudio.stop(); } }catch(e){}
     $('spk').textContent=spkOn?'Mute speaker':'Unmute speaker'; };
+  async function teardown(){
+    try{ if(countIv){ clearInterval(countIv); countIv=null; } }catch(e){}
+    try{ if(avAudio) avAudio.stop(); }catch(e){} avAudio=null;
+    try{ if(rtm){ await rtm.logout(); } }catch(e){} rtm=null;
+    try{ if(client){ await client.leave(); } }catch(e){} client=null;
+  }
+  $('leave').onclick=async()=>{
+    $('leave').disabled=true;
+    await teardown();
+    document.getElementById('video').innerHTML='';
+    $('count').textContent=''; $('spk').style.display='none'; $('leave').style.display='none';
+    $('leave').disabled=false; spkOn=true; $('spk').textContent='Mute speaker';
+    $('join').style.display=''; $('join').disabled=false;
+    msg('Press Watch to join the broadcast.');
+  };
   window.addEventListener('pagehide',()=>{ try{ if(rtm) rtm.logout(); if(client) client.leave(); }catch(e){} });
 </script>
 </body></html>
