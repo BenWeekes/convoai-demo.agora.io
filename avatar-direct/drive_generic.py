@@ -96,12 +96,14 @@ async def run_ws(ws_addr, sid):
 
 async def stream_audio(ws):
     wf=wave.open(WAV,"rb"); sr=wf.getframerate(); frames=wf.readframes(wf.getnframes()); wf.close()
-    chunk=int(sr*0.5)*2; i=0; t0=time.time(); sent=0.0
+    # Flush small ~60ms frames (matches the clean h2a/puppet cadence). Half-second
+    # bursts under-run LemonSlice's jitter buffer and glitch at the chunk boundaries.
+    STEP=0.06; chunk=int(sr*STEP)*2; i=0; t0=time.time(); sent=0.0
     while i<len(frames):
         c=frames[i:i+chunk]; i+=chunk
         await ws.send(json.dumps({"command":"voice","audio":base64.b64encode(c).decode(),
                                   "sampleRate":sr,"encoding":"PCM16","event_id":uuid.uuid4().hex}))
-        sent+=0.5
+        sent+=STEP
         d=t0+sent-time.time()          # pace ~realtime
         if d>0: await asyncio.sleep(d)
     await ws.send(json.dumps({"command":"voice_end","event_id":uuid.uuid4().hex}))

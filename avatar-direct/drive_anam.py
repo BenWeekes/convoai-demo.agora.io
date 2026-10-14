@@ -37,7 +37,17 @@ def auth():
     ag={"appId":APP,"token":TOKEN,"channel":CH,"uid":UID,"quality":"high","videoEncoding":"H264",
         "enableStringUids":False,"activityIdleTimeout":600,"audioSampleRate":24000}
     if W>0 and H>0: ag["width"]=W; ag["height"]=H
-    body={"personaConfig":{"avatarId":AVATAR,"avatarModel":MODEL},"environment":{"agoraSettings":ag}}
+    # directorNotes: customStylePrompt + expressivity(0..1) make the avatar livelier
+    persona={"avatarId":AVATAR,"avatarModel":MODEL}
+    _style=os.environ.get("ANAM_STYLE","").strip(); _expr=os.environ.get("ANAM_EXPRESSIVITY","").strip()
+    if _style or _expr:
+        dn={}
+        if _style: dn["customStylePrompt"]=_style
+        if _expr:
+            try: dn["expressivity"]=float(_expr)
+            except ValueError: pass
+        persona["directorNotes"]=dn
+    body={"personaConfig":persona,"environment":{"agoraSettings":ag}}
     r=requests.post(f"{BASE}/auth/session-token",headers=HDR,json=body,timeout=30); r.raise_for_status()
     return r.json()["sessionToken"]
 

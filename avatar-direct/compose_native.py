@@ -4,11 +4,12 @@ onto its video, aligned only by the recorder's captured audio_offset (no cross-c
 then trim so every clip has an identical lead before speech and identical duration.
 
 Usage: WORK=<dir> compose_native.py <out.mp4> [out_height]
-Env: LEAD (s before speech, default 0.5), DUR (total s, default 20.0)
+Env: LEAD (s before speech, default 0.5); DUR (total s) — if unset, keep the FULL
+     captured clip from vstart to end (a hardcoded default silently truncates).
 """
 import os, subprocess, sys, wave, numpy as np
 WORK=os.environ["WORK"]; OUT=sys.argv[1]; OH=int(sys.argv[2]) if len(sys.argv)>2 else 480
-LEAD=float(os.environ.get("LEAD","0.5")); DUR=float(os.environ.get("DUR","20.0"))
+LEAD=float(os.environ.get("LEAD","0.5")); _DUR=os.environ.get("DUR")
 MKV=f"{WORK}/v.mkv"
 subprocess.run(["mkvmerge","-o",MKV,"--timestamps","0:"+f"{WORK}/video.timestamps",f"{WORK}/recv.264"],check=True,stdout=subprocess.DEVNULL)
 off_ms=0
@@ -23,7 +24,9 @@ thr=max(150,rms.max()*0.06);v=np.where(rms>thr)[0]; onset_a=v[0]*0.05
 # audio.wav[t] sits at video-time (off+t). Keep A/V locked: video[vstart] <-> audio[vstart-off].
 vstart=max(0.0, off+onset_a-LEAD)      # aim for LEAD before speech; can't go before the video exists
 astart=max(0.0, vstart-off)            # the audio sample that lines up with video[vstart]
-print(f"{OUT}: audio_offset={off:.3f}s onset_a={onset_a:.2f}s -> vstart={vstart:.3f} astart={astart:.3f}")
+# DUR: keep the FULL remaining clip unless explicitly capped (default must NOT truncate)
+DUR=float(_DUR) if _DUR else max(0.0, len(a)/sr - astart - 0.05)
+print(f"{OUT}: audio_offset={off:.3f}s onset_a={onset_a:.2f}s -> vstart={vstart:.3f} astart={astart:.3f} dur={DUR:.2f}")
 
 vf=(f"[0:v]trim=start={vstart:.3f}:duration={DUR:.3f},setpts=PTS-STARTPTS,scale=-2:{OH}[v];"
     f"[1:a]atrim=start={astart:.3f}:duration={DUR:.3f},asetpts=PTS-STARTPTS,aresample=48000[a]")

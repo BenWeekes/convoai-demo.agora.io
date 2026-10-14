@@ -25,7 +25,7 @@ UP="https://convoai-demo.agora.io/photo-uploads/benbgrid"   # where q3..q6 image
 LS_BASE="https://lemonslice.com/api/liveai/agora"
 # cells 2..6 in grid order: name|driver|avatar-id
 AVATARS=(
-  "anam|anam|28e006d3-7f42-46b2-b09c-4cbd6057cced"
+  "anam|anam|9286a171-5713-4d90-bd02-5934344e2651"
   "q3|lemon|$UP/q3.png"
   "q4|lemon|$UP/q4.png"
   "q5|lemon|$UP/q5.png"
@@ -42,7 +42,10 @@ for spec in "${AVATARS[@]}"; do
   IFS='|' read -r name driver aid <<<"$spec"
   work="$WORKROOT/$name"; mkdir -p "$work"
   if [ "$driver" = "anam" ]; then
+    # directorNotes give Anam more energy (customStylePrompt + expressivity 0..1)
     env WORK="$work" AVATAR_ID="$aid" API_KEY="$ANAM_KEY" ANAM_MODEL="${ANAM_MODEL:-cara-4}" \
+        ANAM_STYLE="${ANAM_STYLE:-Lively and animated, bright energy, quick expressive gestures, frequent smiling}" \
+        ANAM_EXPRESSIVITY="${ANAM_EXPRESSIVITY:-1}" \
         python3 drive_anam.py
   else
     env WORK="$work" AVATAR_ID="$aid" API_BASE="$LS_BASE" API_KEY="$LS_KEY" ASPECT=1x1 \

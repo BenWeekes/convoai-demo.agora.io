@@ -148,3 +148,27 @@ voice, muxed into one square grid (e.g. the benb3 6-cell grid: `[benb3|Anam|q3] 
   faces) vs the human/LemonSlice head-shots — crop those cells tighter if a uniform head size is wanted.
 - **Verify** the same way: mouth-vs-human montages at 2–3 audio peaks + a silence (NOT a fixed-Y
   "mouth band" — faces sit at different heights per cell; use full-frame captures).
+
+### Direct-drive gotchas (hard-won — `drive_*`, `compose_native.py`)
+
+- **A short cell is almost always `compose_native`, NOT the provider.** It used to default
+  `DUR=20.0` and silently `trim` every clip to 20s. A whole session was burnt chasing a phantom
+  "Anam 20s session cap" that did not exist — the raw `v.mkv`/`audio.wav` in the WORK dir were the
+  full ~45s the entire time; only the composed `.mp4` was 20s. **Before blaming a provider for a
+  short/early-ending cell, `ffprobe` the raw capture (`WORK/v.mkv`, `WORK/audio.wav`).** If those are
+  full-length, it is compose. Fixed: `compose_native` now keeps the **full captured length** from
+  `vstart` when `DUR` is unset (pass `DUR=<s>` only to deliberately cap). Anam has **no** session
+  length cap (confirmed on the client: 25fps locked 10s→91s).
+- **LemonSlice send cadence: ~60ms frames, never 0.5s bursts.** `drive_generic.py` streamed
+  half-second `voice` chunks then slept 0.5s; that under-runs LemonSlice's jitter buffer and the
+  channel-published audio glitches at the chunk boundaries. Stream **small ~60ms frames paced
+  real-time** (`STEP=0.06`), matching the clean h2a/`puppet_session.py` bridge (`CHUNK=SR*2*0.06`).
+  (Moot in the *final* grid — it plays the human's clean audio — but it matters for standalone
+  review clips and any live use.)
+- **Anam liveliness = `directorNotes`.** `drive_anam.py` folds `ANAM_STYLE` (→`customStylePrompt`)
+  and `ANAM_EXPRESSIVITY` 0..1 (→`expressivity`) into `personaConfig.directorNotes`. `build_grid.sh`
+  defaults both (lively prompt, expressivity 1). Model is `cara-4`.
+- **Anam kill endpoint 404s.** `POST /engine/session/{id}/kill` returns an HTML 404 from
+  `api.anam.ai/v1` (same path ConvoAI's extension uses). Sessions are reaped by `activityIdleTimeout`
+  instead (ConvoAI uses 120s; keep ours modest so leaked sessions self-clear). Not the cause of any
+  truncation — see the compose gotcha above.
