@@ -125,3 +125,26 @@ narrow `X`/raise `Y` if skin leaks.
    640×426 tile at the tile's position with the **freeze pad** (§3) → `media/{en,zh}-mux.mp4`.
 5. Verify sync via a tile-vs-anam mouth montage at mux peaks + a silence, zoom vs neighbors, (zh)
    heart color. Media stays on the box (gitignored).
+
+## Human-reference variant (human clip + N avatars, same voice)
+
+A variant where **a human's recorded clip drives several avatars** lip-syncing that person's
+voice, muxed into one square grid (e.g. the benb3 6-cell grid: `[benb3|Anam|q3] / [q4|q5|q6]`,
+3×2, 540px cells). Reference impl: **`avatar-direct/build_grid.sh`** (+ `align_grid.py`).
+
+- **The human clip is the sync reference** and its **original audio is the mux audio** (not a
+  recorded cell — avoids the anam-drift problem that bit the vendor grid). The human cell sits at
+  offset 0; the avatars are fitted to it.
+- **Drive** each avatar (LemonSlice via `drive_generic.py` with the hosted image URL + `ASPECT=1x1`;
+  Anam via `drive_anam.py` with the avatar uuid + `cara-4`) using the human's 24k mono WAV, record
+  with `recv_av`, compose with `compose_native.py`.
+- **Alignment is a flat per-avatar OFFSET** here (unlike channel-recorded vendors that drift):
+  because every avatar lip-syncs to the *exact same* source audio, `align_grid.py` measures a
+  single delay per avatar (benb3 onset 1.55s, avatars ~0.5s → ~1.05–1.12s freeze-pad) with windowed
+  drift all <0.07s. Apply `tpad=start_duration=<delay>:start_mode=clone:stop_mode=clone`; only reach
+  for the peak-warp if a cell's windowed drift is actually large.
+- **Mux**: crop each cell square (human 1280×720→center 720², Anam landscape→center square, LemonSlice
+  432²), `xstack` 3×2, map the human's audio. Cartoon source images render **full-body** (small
+  faces) vs the human/LemonSlice head-shots — crop those cells tighter if a uniform head size is wanted.
+- **Verify** the same way: mouth-vs-human montages at 2–3 audio peaks + a silence (NOT a fixed-Y
+  "mouth band" — faces sit at different heights per cell; use full-frame captures).

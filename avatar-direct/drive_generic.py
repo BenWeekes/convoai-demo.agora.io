@@ -77,7 +77,10 @@ def stop_session(sid):
 
 async def run_ws(ws_addr, sid):
     hdr={"authorization": f"Bearer {SESSION_TOKEN}"} if SESSION_TOKEN else {}
-    ws=await websockets.connect(ws_addr, additional_headers=hdr, open_timeout=30, max_size=None)
+    try:
+        ws=await websockets.connect(ws_addr, additional_headers=hdr, open_timeout=30, max_size=None)
+    except TypeError:
+        ws=await websockets.connect(ws_addr, extra_headers=hdr, open_timeout=30, max_size=None)
     init={"command":"init","session_id":sid,"avatar_id":AVATAR,"quality":"high","version":"v1",
           "video_encoding":"H264","activity_idle_timeout":120,"area":"NORTH_AMERICA",
           "agora_settings":agora_settings()}

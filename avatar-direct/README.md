@@ -146,3 +146,24 @@ No aspect is shared by all four: **1:1** covers Tavus/LemonSlice/Protoface but n
   (`cara-4` avatars); some avatars only do `cara-3` @ 720×480. Two-step auth.
 
 Keys/avatar ids are **not** committed — pass them via env.
+
+## Build the recorder (recv_av)
+
+`recv_av.go` is the Go subscriber/recorder; the compiled binary is gitignored (rebuild it):
+```
+go build -o recv_av recv_av.go     # needs the Agora Go SDK bindings (see the vendor_sdk go_sdk)
+```
+It is invoked by `drive_*.py` via `RECV_AV` (see `env.example.sh`).
+
+## Human-reference sync grid (build_grid.sh)
+
+`build_grid.sh` builds an N-cell square grid where a **human clip's audio drives several
+avatars** (LemonSlice + Anam) lip-syncing the SAME audio; each avatar is time-aligned to the
+human clip (the reference) and composited with the human's **original** audio. Built for the
+benb3 6-cell grid — `Row1:[benb3|Anam|q3] Row2:[q4|q5|q6]`, 3×2, 540px square cells.
+
+Because every avatar lip-syncs to the **exact same source audio**, alignment is a per-avatar
+**flat offset** (measured by `align_grid.py` — cross-correlate each avatar's captured audio to
+the human's, with a windowed early/mid/late drift check); peak-warp (`align_peak.py`) is only
+needed if a cell actually drifts (>~0.1s). The human cell is the reference at offset 0, and its
+original audio is the mux audio. Run: `source env.sh && ./build_grid.sh` (see `env.example.sh`).

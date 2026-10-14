@@ -51,7 +51,10 @@ def kill(sid):
     except Exception: pass
 
 async def run(ws_addr, sid):
-    ws=await websockets.connect(ws_addr, additional_headers={}, open_timeout=30, max_size=None)
+    try:
+        ws=await websockets.connect(ws_addr, additional_headers={}, open_timeout=30, max_size=None)
+    except TypeError:
+        ws=await websockets.connect(ws_addr, extra_headers={}, open_timeout=30, max_size=None)
     await ws.send(json.dumps({"command":"init","sessionId":sid,"event_id":uuid.uuid4().hex}))
     async def hb():
         try:
