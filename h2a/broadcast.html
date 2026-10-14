@@ -35,8 +35,8 @@
   .stat{font-size:13px;color:#9aa;}
 </style></head>
 <body>
-  <h1>Human to Avatar — Broadcast</h1>
-  <p class="sub">Your voice drives a LemonSlice avatar in real time. Pick a photo, go live, and share the watch link.</p>
+  <h1 id="hdr">Human to Avatar — Broadcast</h1>
+  <p class="sub" id="sub">Your voice drives an avatar in real time. Pick a photo, go live, and share the watch link.</p>
 
   <div id="setup">
     <div class="panel">
@@ -55,8 +55,8 @@
         </div>
         <div class="opt"><span class="lbl">Noise removal</span>
           <select id="noise">
-            <option value="agora">Agora (browser)</option>
-            <option value="rnnoise">RNNoise (server)</option>
+            <option value="agora">Client</option>
+            <option value="rnnoise">Server</option>
             <option value="both">Both</option>
             <option value="off">Off</option>
           </select>
@@ -72,8 +72,11 @@
     <div><span class="dot"></span><b>You are live</b></div>
     <div id="self"></div>
     <div class="meter"><div id="lvl"></div></div>
-    <div class="share"><span class="lbl">Watch link — share this</span>
-      <input type="text" id="watch" readonly onclick="this.select()"></div>
+    <div class="share"><span class="lbl">Watch link</span>
+      <div style="display:flex;gap:8px;margin-top:6px;">
+        <input type="text" id="watch" readonly onclick="this.select()" style="flex:1;margin-top:0;">
+        <button id="copy" class="sec" style="padding:9px 18px;">Copy</button>
+      </div></div>
     <div class="stat" id="count">Viewers: 0</div>
     <div class="row" style="justify-content:center;">
       <button id="mute" class="sec">Mute mic</button>
@@ -166,11 +169,12 @@
       });
       await client.join(d.appId,d.channel,d.token,d.uid);
       mic=await AgoraRTC.createMicrophoneAudioTrack();
-      if(noise==='agora'||noise==='both'){ const ok=await applyAgoraDenoiser(mic); if(!ok&&noise==='agora') $('note').textContent='Agora denoiser unavailable in this browser — try RNNoise (server).'; }
+      if(noise==='agora'||noise==='both'){ const ok=await applyAgoraDenoiser(mic); if(!ok&&noise==='agora') $('note').textContent='Client denoiser unavailable in this browser — try Server.'; }
       await client.publish([mic]);
       // adjust self-view aspect
       $('self').style.aspectRatio = aspect==='1x1'?'1/1':aspect==='16x9'?'16/9':'2/3';
       $('watch').value=location.origin+d.watchPath;
+      $('hdr').style.display='none'; $('sub').style.display='none';
       $('setup').style.display='none'; $('livebox').style.display='flex'; msg('');
       meterIv=setInterval(()=>{ const v=mic?mic.getVolumeLevel():0; $('lvl').style.width=Math.min(100,Math.round(v*160))+'%'; },120);
       startRtm(d);
@@ -194,6 +198,9 @@
   }
 
   /* ---------- controls ---------- */
+  $('copy').onclick=()=>{ const w=$('watch'); w.select();
+    try{ navigator.clipboard&&navigator.clipboard.writeText(w.value); }catch(e){ try{document.execCommand('copy');}catch(_){} }
+    $('copy').textContent='Copied'; setTimeout(()=>$('copy').textContent='Copy',1500); };
   $('mute').onclick=async()=>{ if(!mic) return; muted=!muted; try{await mic.setMuted(muted);}catch(e){}
     $('mute').textContent=muted?'Unmute mic':'Mute mic'; };
   $('spk').onclick=()=>{ spkOn=!spkOn;
