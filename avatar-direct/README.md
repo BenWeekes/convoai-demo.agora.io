@@ -157,13 +157,54 @@ It is invoked by `drive_*.py` via `RECV_AV` (see `env.example.sh`).
 
 ## Human-reference sync grid (build_grid.sh)
 
-`build_grid.sh` builds an N-cell square grid where a **human clip's audio drives several
-avatars** (LemonSlice + Anam) lip-syncing the SAME audio; each avatar is time-aligned to the
-human clip (the reference) and composited with the human's **original** audio. Built for the
-benb3 6-cell grid — `Row1:[benb3|Anam|q3] Row2:[q4|q5|q6]`, 3×2, 540px square cells.
+`build_grid.sh` builds a 6-cell square grid where a **human clip's audio drives several avatars**
+lip-syncing the SAME audio; each avatar is time-aligned to the human clip (the reference) and
+composited with the human's **original** audio. 3×2 layout, 540px square cells:
 
-Because every avatar lip-syncs to the **exact same source audio**, alignment is a per-avatar
-**flat offset** (measured by `align_grid.py` — cross-correlate each avatar's captured audio to
-the human's, with a windowed early/mid/late drift check); peak-warp (`align_peak.py`) is only
-needed if a cell actually drifts (>~0.1s). The human cell is the reference at offset 0, and its
-original audio is the mux audio. Run: `source env.sh && ./build_grid.sh` (see `env.example.sh`).
+```
+ cell 1 (c0)   cell 2 (c1)   cell 3 (c2)
+ cell 4 (c3)   cell 5 (c4)   cell 6 (c5)
+```
+
+Cell 1 is always the **human** (`$HUMAN`, the reference at offset 0, whose audio is the mux audio).
+Cells 2–6 come from the `AVATARS` array. Current grid: `[benb3 | q2g | q3-cartoon] / [q4 | q5 | q6-cartoon]`.
+
+Because every avatar lip-syncs to the **exact same source audio**, alignment is a per-avatar **flat
+offset** (measured by `align_grid.py`; peak-warp `align_peak.py` only if a cell drifts >~0.1s).
+
+### Editing cells (the `AVATARS` array)
+
+Each of cells 2–6 is one line: **`name|driver|avatar-id|model`** (the `model` field is optional).
+
+| Field | Meaning |
+|---|---|
+| `name` | Cell label + working filename (`$WORKROOT/<name>.mp4`). Keep it unique; order = grid order (cells 2→6). |
+| `driver` | `lemon` (LemonSlice — avatar-id is an **image URL**) or `anam` (Anam — avatar-id is an **avatar UUID**). |
+| `avatar-id` | For `lemon`: the hosted image URL (put the PNG in `web/uploads/benbgrid/`, it serves at `$UP/<file>.png`). For `anam`: the avatar UUID. |
+| `model` | Omit for the standard renderer (square `1x1`). `cartoon` → LemonSlice **cartoon model** for animated / non-human characters; it renders **only** at `2x3` (portrait), so the pipeline drives it at `2x3` and **top-crops** it to the square cell (keeps the head). |
+
+Common edits:
+- **Swap a cell's character (same style):** upload the new PNG to `web/uploads/benbgrid/`, point that
+  line's avatar-id at `$UP/<newfile>.png`. Rebuild.
+- **Make a cell a cartoon:** append `|cartoon` to its line (and use a cartoon/animated source image).
+- **Change the layout / which cell is where:** reorder the `AVATARS` lines (cells fill left→right,
+  top row then bottom). Update the align + final-`ffmpeg` input lists (they name each `$WORKROOT/<name>.mp4`
+  in the same order) and the human crop if the reference clip changes.
+
+### Rebuild — two ways
+
+- **Full (re-drive every avatar):** `source env.sh && ./build_grid.sh`. Drives each cell live through its
+  provider (~70s/cell), composes, aligns, stacks. Use after changing an image/avatar.
+- **Compose-only (`SKIP_DRIVE=1`):** reuse **pre-rendered cell mp4s** (e.g. hand-picked eval clips, or a
+  regen that doesn't start with eyes closed). Drop the cell clips into `WORKROOT` named exactly
+  `<name>.mp4` (`q2g.mp4`, `q3.mp4`, …), then:
+  ```bash
+  W=/tmp/bgrid3; mkdir -p $W
+  cp q2g_lemon.mp4 $W/q2g.mp4; cp q5_regen.mp4 $W/q5.mp4; cp q3_cartoon.mp4 $W/q3.mp4; …   # one per cell
+  SKIP_DRIVE=1 OUT=$W/grid.mp4 WORKROOT=$W ./build_grid.sh      # just align + xstack, ~1-2 min
+  ```
+  A cartoon cell clip is portrait (446×720) and is top-cropped to square by the `|cartoon` flag on its
+  `AVATARS` line; standard cells are already 540². This is how the shipped grid was built.
+
+Output defaults to `$OUT` (env; else `benb_grid.mp4`); copy it to `web/uploads/benbgrid/` to publish
+(that dir is gitignored — large media isn't committed).
