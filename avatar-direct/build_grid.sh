@@ -27,19 +27,24 @@ LS_BASE="https://lemonslice.com/api/liveai/agora"
 # model=cartoon -> LemonSlice cartoon model (only supports aspect 2x3; top-cropped to the square
 # cell to keep the head). q3 (mouse) and q6 (monster) are the two cartoon characters.
 AVATARS=(
-  "anam|anam|9286a171-5713-4d90-bd02-5934344e2651"
+  "q2g|lemon|$UP/q2g.png"
   "q3|lemon|$UP/q3.png|cartoon"
   "q4|lemon|$UP/q4.png"
   "q5|lemon|$UP/q5.png"
   "q6|lemon|$UP/q6.png|cartoon"
 )
+# The shipped grid composited hand-picked eval cell clips (q2g_lemon.mp4, q5_regen.mp4 — the latter a
+# regen that doesn't start with eyes closed) + the cartoon q3/q6, via SKIP_DRIVE=1: drop the cell
+# mp4s into WORKROOT named q2g/q3/q4/q5/q6.mp4, then `SKIP_DRIVE=1 bash build_grid.sh` to align+xstack.
 
-# ---- 1. drive audio (24k mono PCM16) ----
+# ---- 1+2. drive + compose each avatar. SKIP_DRIVE=1 skips this and composes straight from
+#          pre-rendered cell mp4s already in WORKROOT (e.g. the shared eval clips) ----
+if [ "${SKIP_DRIVE:-0}" != "1" ]; then
+# drive audio (24k mono PCM16)
 WAV="$WORKROOT/input_24k.wav"
 ffmpeg -y -v error -i "$HUMAN" -ac 1 -ar 24000 -c:a pcm_s16le "$WAV"
 export WAV SDK_LIB RECV_AV AGORA_APP_ID AGORA_APP_CERTIFICATE
 
-# ---- 2. drive + record + compose each avatar ----
 for spec in "${AVATARS[@]}"; do
   IFS='|' read -r name driver aid model <<<"$spec"
   work="$WORKROOT/$name"; mkdir -p "$work"
@@ -57,11 +62,12 @@ for spec in "${AVATARS[@]}"; do
   fi
   env WORK="$work" python3 compose_native.py "$WORKROOT/$name.mp4" "$CELL"
 done
+fi   # end SKIP_DRIVE guard
 
 # ---- 3. measure per-avatar delay vs the human reference (flat offset; drift check) ----
 #   align_grid.py prints: "<name>.mp4: ... delay=+1.050s ... drift=0.030s"
 mapfile -t ALIGN < <(python3 align_grid.py "$HUMAN" \
-  "$WORKROOT/anam.mp4" "$WORKROOT/q3.mp4" "$WORKROOT/q4.mp4" "$WORKROOT/q5.mp4" "$WORKROOT/q6.mp4")
+  "$WORKROOT/q2g.mp4" "$WORKROOT/q3.mp4" "$WORKROOT/q4.mp4" "$WORKROOT/q5.mp4" "$WORKROOT/q6.mp4")
 printf '%s\n' "${ALIGN[@]}"
 get_delay(){ printf '%s\n' "${ALIGN[@]}" | grep -oE "$1\.mp4: .*delay=[+-][0-9.]+" | grep -oE "delay=[+-][0-9.]+" | grep -oE "[+-][0-9.]+" | head -1; }
 # NOTE: if any cell's drift is large (>~0.1s), warp it to the human with align_peak.py
@@ -87,7 +93,7 @@ fc+="[c0][c1][c2][c3][c4][c5]xstack=inputs=6:layout=0_0|${CELL}_0|$((CELL*2))_0|
 
 ffmpeg -y -v error \
   -i "$HUMAN" \
-  -i "$WORKROOT/anam.mp4" -i "$WORKROOT/q3.mp4" -i "$WORKROOT/q4.mp4" -i "$WORKROOT/q5.mp4" -i "$WORKROOT/q6.mp4" \
+  -i "$WORKROOT/q2g.mp4" -i "$WORKROOT/q3.mp4" -i "$WORKROOT/q4.mp4" -i "$WORKROOT/q5.mp4" -i "$WORKROOT/q6.mp4" \
   -filter_complex "$fc" -map "[v]" -map 0:a \
   -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -c:a aac -shortest "$OUT"
 echo "built $OUT"

@@ -90,7 +90,8 @@ async function start(){
     client.on("user-published",async(user,mt)=>{
       const uid=String(user.uid); if(uid!==avatarUid&&uid!==AGENT_AUDIO_UID) return;
       await client.subscribe(user,mt);
-      if(uid===avatarUid){ if(mt==="video"){ user.videoTrack.play("avatar"); $('avatar').classList.remove('loading'); avVideo=true; try{if(rawAudio)rawAudio.stop();}catch(e){} status("Host is live."); } if(mt==="audio"){ user.audioTrack.play(); } }
+      if(uid===avatarUid){ if(mt==="video"){ user.videoTrack.play("avatar"); $('avatar').classList.remove('loading'); avVideo=true; try{if(rawAudio)rawAudio.stop();}catch(e){} status("Host is live.");
+          fetch(`${BACKEND}/director/status?session=${encodeURIComponent(session)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({avatarReady:true})}).catch(()=>{}); } if(mt==="audio"){ user.audioTrack.play(); } }
       else if(uid===AGENT_AUDIO_UID && mt==="audio"){ rawAudio=user.audioTrack; if(!avVideo){ try{rawAudio.play();}catch(e){} } }
     });
     await client.join(appId,session,d.userToken,isNaN(+d.userUid)?d.userUid:+d.userUid);

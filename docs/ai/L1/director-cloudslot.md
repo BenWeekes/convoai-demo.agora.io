@@ -18,24 +18,37 @@ per-session, thread-safe inbox:
 
 - `{"type":"message","from","text"}` — chat → reply, addressing the sender by name.
 - `{"type":"game","text"}` — a live game moment → one punchy commentary line.
-- `priority`: `"interrupt"` (cut in via `/speak INTERRUPT`), `"normal"` (ahead of chat), `"low"` (chat default).
 
-Each tick, for a session that is **quiet** (not speaking, past its busy estimate, debounced, and not
-**gated**), the director ranks the inbox (priority → game-over-chat → recency), asks the **craft LLM**
-(grok-4.3) for ONE short line, and pushes it via ConvoAI **`/speak`** (`APPEND`; `INTERRUPT` only for a
-moderator). Empty inbox + sustained quiet → generic banter (never dead air).
+**Priority ladder** (high→low): `interrupt` (moderator mic barge-in) → `win` (a real win / bonus) →
+`message` (chat) → `game` (ordinary game commentary) → `low`. Each tick, for a **quiet** session (not
+speaking, past its busy estimate, debounced, not **gated**): an interrupt-class item (`interrupt` or
+`win`) fires immediately via `/speak INTERRUPT`; otherwise the top-ranked item is pushed via
+`/speak APPEND`. Empty inbox + sustained quiet → **game-aware filler** (comment on the latest spin,
+losses included) if a fresh game snapshot exists, else generic banter (never dead air).
 
-- **Speak-only agents.** The agent's own LLM is pointed at a **no-op** endpoint
-  (`/simple-backend/noop-llm/chat/completions`, returns empty) so it never auto-replies/greets — the
-  director is the single voice. The director crafts with **`CRAFT_LLM_*`** (grok-4.3), separate from the
-  agent LLM. Set per profile: `*_LLM_URL=<noop>`, `*_CRAFT_LLM_URL/MODEL/API_KEY=<grok>`.
-- **Quiet detection** = ConvoAI's RTM `state.speaking` (true/false), consumed **server-side** by a per
-  session node RTM relay (`director_rtm.mjs`, `rtm-nodejs` + `RtmTokenBuilder`, retries the transient
-  `-13012`). The relay also forwards the moderator's `user.transcription` (final) as an
-  `interrupt` message. Browser relay is a fallback.
-- **Credits/coalescing** (CloudSlot): `/api/game-events` maps raw sstreamer v1 events → director events,
-  narrating only notable moments (`round.settled` with a win / free-spins), converting minor units to
-  credits (`740` → `7.40`), deduping by `id`, dropping stale by `observedAt`, acking (2xx) before crafting.
+- **Speak-only agents.** The agent's own LLM is a **no-op** (`/simple-backend/noop-llm/chat/completions`,
+  returns empty) so it never auto-replies — the director is the single voice. Crafts with `CRAFT_LLM_*`
+  (grok-4.3). The ConvoAI greeting is also emptied where speech must wait for readiness (Slickback).
+- **Line cleanup.** Every crafted line is stripped of emoji and of a **trailing vocative**
+  (`"…locked in, folks!"` → `"…locked in!"`) — mid-sentence vocatives are kept.
+- **Per-profile knobs** (config → director session): `FILLER_GAP_S` (quiet seconds before filler; small =
+  near-continuous, e.g. Slickback `1`), `ALLOW_INTERRUPT` (`false` → **every** line APPENDs, host never
+  cuts itself off — Slickback), `REQUIRE_AVATAR_READY` (`true` → hold all speech until the page POSTs
+  `/director/status {avatarReady:true}` on first decoded frame; fallback timer releases).
+- **Message fairness + de-dup.** A message answers a given send **once** (a duplicate still *waiting* in
+  the inbox is dropped; a genuine re-send after the first was spoken is allowed). A sender just answered
+  is de-prioritised, so a different user waiting gets a turn first.
+- **Quiet detection** = ConvoAI's RTM `state.speaking`, consumed **server-side** by a per-session node
+  RTM relay (`director_rtm.mjs`, retries the transient `-13012`); it also forwards the moderator's
+  `user.transcription` (final) as an `interrupt` message. Browser relay is a fallback.
+- **Win calling + snapshot** (CloudSlot): `/api/game-events` maps raw Sugar-Rush v1 events → director
+  events. **Every** win the player sees is called out, tiered by `winMultiplier`: ≥10× `HUGE WIN`, ≥3×
+  `Big win` (both INTERRUPT), 1–3× ordinary and sub-stake "small win, under the bet" (both APPEND, and
+  ordinary game commentary coalesces to the latest so fast spins don't pile up). Free-spins bonus →
+  announced once. Amounts are spoken in **dollars** (`$2.40`). Scaling uses engine fields **only**
+  (`betMinor` + `winMultiplier`) — never inferred. Every `round.settled` also updates a running
+  **snapshot** (bet/total/result/streak/tumbles/balance) used for the game-aware filler, so the host is
+  aware of losses and cold streaks. Dedup by `id`, drop stale by `observedAt`, ack (2xx) before crafting.
 
 ## Routes (`simple-backend`)
 
@@ -44,9 +57,9 @@ moderator). Empty inbox + sustained quiet → generic banter (never dead air).
 | `POST /director/start?profile=&game=&avatar=` | Start a session. For a TMS profile: dual-channel + TMS session create (below). Else single-channel (demo). Returns join creds + `eventsUrl`. |
 | `POST /director/events?session=` | Typed events in (`[{type,text,from?,priority?}]`, list / `{events:[]}` / single). |
 | `POST /director/speaking?session=` | `state.speaking` relay (accepts `{speaking}` or TMS `{state}`). |
-| `POST/GET /director/status?session=` | TMS `rendererReady`/`gameVideoReady` + browser `clientVideoReady`; drives activation + commentary gate. |
-| `POST /director/stop?session=&profile=` | TMS `DELETE` (or stop), hang up the agent, kill the relay. |
-| `POST /api/game-events?session=` | Raw game-event receiver (bearer + `Idempotency-Key`, dedupe, units, coalesce → director). |
+| `POST/GET /director/status?session=` | TMS `rendererReady`/`gameVideoReady` + browser `clientVideoReady` (drives activation); for a non-TMS session `{avatarReady:true}` releases the `REQUIRE_AVATAR_READY` gate. |
+| `POST /director/stop?session=&profile=` | TMS `DELETE` even if the in-memory map was lost (restart-safe — the session id **is** the TMS sessionId), hang up the agent, kill the relay. |
+| `POST /api/game-events?session=` | Raw game-event receiver (bearer + `Idempotency-Key`, dedupe by `id`). Expects `betMinor` + `winMultiplier` on `round.settled` (doCollect) for win scaling; `[GAMEEV]` logs each event + mapping. |
 | `POST /noop-llm/chat/completions` | Empty-completion LLM for speak-only agents. |
 
 ## CloudSlot ↔ Trulience TMS (staged behind `TMS_URL`)
@@ -71,9 +84,17 @@ Browser (`web/cloudslot/`): subscribes the composite on the **output** channel (
 mic (muted by default) on the **input** channel, POSTs `clientVideoReady` on first decoded frame. The
 page offers a **game** dropdown + an **avatar-id** box (passed through as `?game=`/`?avatar=`).
 
-**Profiles:** `CLOUDSLOT` (cascading ares + grok-4.3 + xai/carina, `TMS_URL` set, `TRL_AVATAR_ID`),
-`SLICKBACK` (LemonSlice avatar, ElevenLabs voice), `DIRECTOR` (generic, audio-only). The avatar id and
-scene must be provisioned on the TMS broker; `CLOUDSLOT_GAME_URL` is allowlisted broker-side.
+**Profiles:** `CLOUDSLOT` (cascading ares + grok-4.3 + xai/carina, `TMS_URL` set, `TRL_AVATAR_ID`;
+interrupts on for wins), `SLICKBACK` (LemonSlice **cartoon** avatar at `AVATAR_ASPECT_RATIO=2x3`,
+near-continuous blackjack banter `FILLER_GAP_S=1`, `ALLOW_INTERRUPT=false` so he always APPENDs,
+`REQUIRE_AVATAR_READY=true`, empty greeting, loading spinner on the page), `DIRECTOR` (generic,
+audio-only). The avatar id/scene must be provisioned on the TMS broker; `CLOUDSLOT_GAME_URL` is
+allowlisted broker-side.
+
+**LemonSlice cartoon model:** pass `AVATAR_MODEL=cartoon` (forwarded to the generic provider as
+`model`) for animated / non-human characters — it renders **only** at aspect `2x3`, so set
+`AVATAR_ASPECT_RATIO=2x3` with it. Same `model`/`2x3` combo is used by the `avatar-direct` grid
+pipeline (`build_grid.sh`) for its cartoon cells (top-cropped to square).
 
 ## Known gotchas
 
