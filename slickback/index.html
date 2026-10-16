@@ -3,7 +3,7 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Slickback — Director Console</title>
 <script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.23.0.js"></script>
-<script src="/slickback/agora-rtm.js"></script>
+<script src="https://convoai-demo.agora.io/slickback/agora-rtm.js"></script>
 <style>
   :root{color-scheme:dark;}*{box-sizing:border-box;}
   body{margin:0;background:#0c0e14;color:#e8e8ee;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}
@@ -49,7 +49,7 @@
 </div>
 
 <script>
-const BACKEND="/simple-backend", PROFILE="SLICKBACK";
+const BACKEND="https://convoai-demo.agora.io/simple-backend", PROFILE="SLICKBACK";
 const $=id=>document.getElementById(id);
 const status=t=>{ $('status').textContent=t||""; };
 const L=(...a)=>{ try{console.log("[slickback]",...a);}catch(e){} };
