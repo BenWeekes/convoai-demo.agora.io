@@ -12,3 +12,4 @@ input_24k.wav
 # built recorder binary
 recv_av
 __pycache__/
+env.sh

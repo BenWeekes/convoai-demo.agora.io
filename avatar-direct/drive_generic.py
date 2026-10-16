@@ -37,6 +37,7 @@ API_BASE = os.environ["API_BASE"].rstrip("/")
 API_KEY  = os.environ["API_KEY"]
 AVATAR   = os.environ["AVATAR_ID"]
 ASPECT   = os.environ.get("ASPECT", "")   # e.g. "1x1" / "3x2" (LemonSlice aspect hint)
+MODEL    = os.environ.get("MODEL", "")    # e.g. "cartoon" (LemonSlice model variant; empty = default)
 HERE = os.path.dirname(os.path.abspath(__file__))
 WAV  = os.environ.get("WAV", os.path.join(HERE, "input_24k.wav"))
 WORK = os.environ.get("WORK", os.path.join(HERE, "work")); os.makedirs(WORK, exist_ok=True)
@@ -62,6 +63,7 @@ def start_session():
     body={"avatar_id":AVATAR,"quality":"high","version":"v1","video_encoding":"H264",
           "activity_idle_timeout":120,"area":"NORTH_AMERICA","agora_settings":agora_settings()}
     if ASPECT: body["aspect_ratio"]=ASPECT
+    if MODEL:  body["model"]=MODEL
     r=requests.post(f"{API_BASE}/session/start",
                     headers={"x-api-key":API_KEY,"content-type":"application/json"},
                     json=body, timeout=90)
@@ -85,6 +87,7 @@ async def run_ws(ws_addr, sid):
           "video_encoding":"H264","activity_idle_timeout":120,"area":"NORTH_AMERICA",
           "agora_settings":agora_settings()}
     if ASPECT: init["aspect_ratio"]=ASPECT
+    if MODEL:  init["model"]=MODEL
     await ws.send(json.dumps(init)); print("init sent")
     async def listen():
         try:

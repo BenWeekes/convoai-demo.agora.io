@@ -20,8 +20,13 @@
   button{border:0;border-radius:9px;padding:11px 20px;font-weight:700;font-size:14px;cursor:pointer;background:#4a7dff;color:#fff;}
   button.sec{background:#262b38;}button.stop{background:#c23b3b;}button:disabled{opacity:.45;cursor:default;}
   /* avatar on the right, portrait */
-  #avatar{width:100%;aspect-ratio:2/3;background:#000;border-radius:12px;overflow:hidden;}
+  #avatar{width:100%;aspect-ratio:2/3;background:#000;border-radius:12px;overflow:hidden;position:relative;}
   #avatar video{width:100%;height:100%;object-fit:cover;}
+  .spinner{position:absolute;inset:0;z-index:2;display:none;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:#000;}
+  #avatar.loading .spinner{display:flex;}
+  .spinner i{width:46px;height:46px;border:4px solid #2a3040;border-top-color:#4a7dff;border-radius:50%;animation:spin .8s linear infinite;}
+  .spinner span{color:#9aa3b2;font-size:13px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
   .status{font-size:13px;color:#9aa3b2;min-height:18px;margin-top:10px;}
   .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#444;margin-right:6px;vertical-align:middle;}
   .dot.on{background:#39d98a;box-shadow:0 0 8px #39d98a;}
@@ -44,7 +49,7 @@
   </div>
   <div class="card">
     <h2>Host</h2>
-    <div id="avatar"></div>
+    <div id="avatar"><div class="spinner"><i></i><span>Connecting the host…</span></div></div>
   </div>
 </div>
 
@@ -72,18 +77,20 @@ $('send').onclick=async()=>{
   catch(e){ status("Send error: "+e.message); }
 };
 
+const SPINNER='<div class="spinner"><i></i><span>Connecting the host…</span></div>';
 async function start(){
   $('power').disabled=true; status("Starting…");
+  $('avatar').innerHTML=SPINNER; $('avatar').classList.add('loading');
   try{
     const d=await (await fetch(`${BACKEND}/director/start?profile=${PROFILE}`,{method:'POST'})).json();
-    if(!d.ok){ status("Error: "+(d.error||'start failed')); $('power').disabled=false; return; }
+    if(!d.ok){ status("Error: "+(d.error||'start failed')); $('power').disabled=false; $('avatar').classList.remove('loading'); return; }
     session=d.session; appId=d.appid; avatarUid=String(d.avatarUid||"102");
     const AGENT_AUDIO_UID="100"; let rawAudio=null, avVideo=false;
     client=AgoraRTC.createClient({mode:"rtc",codec:"vp8"});
     client.on("user-published",async(user,mt)=>{
       const uid=String(user.uid); if(uid!==avatarUid&&uid!==AGENT_AUDIO_UID) return;
       await client.subscribe(user,mt);
-      if(uid===avatarUid){ if(mt==="video"){ user.videoTrack.play("avatar"); avVideo=true; try{if(rawAudio)rawAudio.stop();}catch(e){} status("Host is live."); } if(mt==="audio"){ user.audioTrack.play(); } }
+      if(uid===avatarUid){ if(mt==="video"){ user.videoTrack.play("avatar"); $('avatar').classList.remove('loading'); avVideo=true; try{if(rawAudio)rawAudio.stop();}catch(e){} status("Host is live."); } if(mt==="audio"){ user.audioTrack.play(); } }
       else if(uid===AGENT_AUDIO_UID && mt==="audio"){ rawAudio=user.audioTrack; if(!avVideo){ try{rawAudio.play();}catch(e){} } }
     });
     await client.join(appId,session,d.userToken,isNaN(+d.userUid)?d.userUid:+d.userUid);
@@ -91,7 +98,7 @@ async function start(){
     startRtm(appId,d.userRtmUid||String(d.userUid),d.userToken);
     live=true; $('power').textContent='Stop'; $('power').className='stop'; $('power').disabled=false; $('send').disabled=false;
     status("Live — edit the JSON and Send.");
-  }catch(e){ status("Error: "+(e.message||e)); $('power').disabled=false; }
+  }catch(e){ status("Error: "+(e.message||e)); $('power').disabled=false; $('avatar').classList.remove('loading'); }
 }
 async function startRtm(appid,rtmUid,token){
   try{ rtm=new AgoraRTM.RTM(appid,String(rtmUid),{logLevel:'error'}); await rtm.login({token});
@@ -108,7 +115,7 @@ async function stop(){
   try{ if(micTrack){ micTrack.stop(); micTrack.close(); } }catch(e){}
   try{ if(client) await client.leave(); }catch(e){}
   try{ if(rtm) await rtm.logout(); }catch(e){}
-  live=false; micTrack=null; client=null; rtm=null; $('avatar').innerHTML='';
+  live=false; micTrack=null; client=null; rtm=null; $('avatar').classList.remove('loading'); $('avatar').innerHTML='';
   $('power').textContent='Start'; $('power').className=''; $('power').disabled=false; $('send').disabled=true;
   $('mic').disabled=true; $('spkdot').classList.remove('on'); $('spklbl').textContent='idle';
   status("Stopped. Press Start to go live again.");

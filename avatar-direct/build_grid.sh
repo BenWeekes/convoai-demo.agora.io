@@ -23,13 +23,15 @@ WORKROOT="${WORKROOT:-/tmp/bgrid}"; mkdir -p "$WORKROOT"
 OUT="${OUT:-$HERE/benb_grid.mp4}"
 UP="https://convoai-demo.agora.io/photo-uploads/benbgrid"   # where q3..q6 images are hosted
 LS_BASE="https://lemonslice.com/api/liveai/agora"
-# cells 2..6 in grid order: name|driver|avatar-id
+# cells 2..6 in grid order: name|driver|avatar-id|model
+# model=cartoon -> LemonSlice cartoon model (only supports aspect 2x3; top-cropped to the square
+# cell to keep the head). q3 (mouse) and q6 (monster) are the two cartoon characters.
 AVATARS=(
   "anam|anam|9286a171-5713-4d90-bd02-5934344e2651"
-  "q3|lemon|$UP/q3.png"
+  "q3|lemon|$UP/q3.png|cartoon"
   "q4|lemon|$UP/q4.png"
   "q5|lemon|$UP/q5.png"
-  "q6|lemon|$UP/q6.png"
+  "q6|lemon|$UP/q6.png|cartoon"
 )
 
 # ---- 1. drive audio (24k mono PCM16) ----
@@ -39,7 +41,7 @@ export WAV SDK_LIB RECV_AV AGORA_APP_ID AGORA_APP_CERTIFICATE
 
 # ---- 2. drive + record + compose each avatar ----
 for spec in "${AVATARS[@]}"; do
-  IFS='|' read -r name driver aid <<<"$spec"
+  IFS='|' read -r name driver aid model <<<"$spec"
   work="$WORKROOT/$name"; mkdir -p "$work"
   if [ "$driver" = "anam" ]; then
     # directorNotes give Anam more energy (customStylePrompt + expressivity 0..1)
@@ -48,7 +50,9 @@ for spec in "${AVATARS[@]}"; do
         ANAM_EXPRESSIVITY="${ANAM_EXPRESSIVITY:-1}" \
         python3 drive_anam.py
   else
-    env WORK="$work" AVATAR_ID="$aid" API_BASE="$LS_BASE" API_KEY="$LS_KEY" ASPECT=1x1 \
+    # cartoon cells only support 2x3 (portrait); everyone else renders square (1x1).
+    if [ "$model" = "cartoon" ]; then asp="2x3"; mdl="cartoon"; else asp="1x1"; mdl=""; fi
+    env WORK="$work" AVATAR_ID="$aid" API_BASE="$LS_BASE" API_KEY="$LS_KEY" ASPECT="$asp" MODEL="$mdl" \
         python3 drive_generic.py
   fi
   env WORK="$work" python3 compose_native.py "$WORKROOT/$name.mp4" "$CELL"
@@ -70,9 +74,12 @@ fc=""
 fc+="[0:v]crop=720:720:280:0,scale=${CELL}:${CELL},fps=${FPS},setpts=PTS-STARTPTS[c0];"
 i=1
 for spec in "${AVATARS[@]}"; do
-  IFS='|' read -r name driver aid <<<"$spec"
+  IFS='|' read -r name driver aid model <<<"$spec"
   d="$(get_delay "$name")"; d="${d#+}"; [ -z "$d" ] && d=0
-  if [ "$name" = "anam" ]; then crop="crop=ih:ih:(iw-ih)/2:0,"; else crop=""; fi   # anam is landscape -> center square
+  # anam is landscape -> center square; cartoon is portrait (2x3) -> top-anchored square (keep head)
+  if [ "$name" = "anam" ]; then crop="crop=ih:ih:(iw-ih)/2:0,"
+  elif [ "$model" = "cartoon" ]; then crop="crop=iw:iw:0:0,"
+  else crop=""; fi
   fc+="[$i:v]${crop}scale=${CELL}:${CELL},fps=${FPS},tpad=start_duration=${d}:start_mode=clone:stop_mode=clone,setpts=PTS-STARTPTS[c$i];"
   i=$((i+1))
 done
