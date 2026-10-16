@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CloudSlot — Live Slots Host</title>
+<script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.23.0.js"></script>
+<style>
+  :root{color-scheme:dark;}*{box-sizing:border-box;}
+  body{margin:0;background:#0c0e14;color:#e8e8ee;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}
+  header{padding:12px 16px;background:#13161f;border-bottom:1px solid #222736;display:flex;align-items:center;gap:12px;}
+  header h1{font-size:16px;margin:0;font-weight:700;letter-spacing:.3px;}
+  .pill{font-size:12px;color:#9aa3b2;}
+  .wrap{max-width:1400px;margin:0 auto;padding:16px;}
+  /* composite is 1920x540 (game left + avatar right) — full width across the top */
+  #avatar{width:100%;background:#000;border-radius:12px;overflow:hidden;aspect-ratio:1920/540;max-height:70vh;}
+  #avatar video{width:100%;height:100%;object-fit:contain;background:#000;}
+  .controls{display:flex;gap:10px;align-items:center;margin-top:12px;flex-wrap:wrap;}
+  select,button{border:0;border-radius:9px;padding:11px 16px;font-weight:700;font-size:14px;cursor:pointer;}
+  select{background:#1b2130;color:#e8e8ee;border:1px solid #2a3040;}
+  button{background:#4a7dff;color:#fff;}button.sec{background:#262b38;}button.stop{background:#c23b3b;}button:disabled{opacity:.45;cursor:default;}
+  .chat{margin-top:16px;background:#11141d;border:1px solid #222736;border-radius:12px;padding:14px;}
+  .chat h2{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#8b93a5;margin:0 0 10px;}
+  .row{display:flex;gap:8px;align-items:center;}
+  input{background:#0c0e14;border:1px solid #2a3040;border-radius:8px;color:#e8e8ee;padding:11px 12px;font-size:14px;}
+  input.from{width:150px;}input.msg{flex:1;min-width:160px;}
+  .status{font-size:13px;color:#9aa3b2;min-height:18px;margin-top:10px;}
+</style></head>
+<body>
+<header>
+  <h1>CLOUDSLOT</h1><span class="pill">live slots host</span>
+</header>
+<div class="wrap">
+  <div id="avatar"></div>
+  <div class="controls">
+    <select id="game">
+      <option value="https://staging.bite.gg/demo-games/?id=sugar-rush-1000&fullscreen=true">Sugar Rush 1000</option>
+      <option value="https://staging.bite.gg/demo-games/?id=gates-of-olympus-1000&fullscreen=true">Gates of Olympus 1000</option>
+    </select>
+    <input id="avatarid" placeholder="avatar id" value="4024947545962532756" style="width:200px;">
+    <button id="power">Start</button>
+    <button id="mic" class="sec" disabled>Unmute mic</button>
+  </div>
+  <div class="status" id="status">Pick a game and press Start.</div>
+
+  <div class="chat">
+    <h2>Send a chat message</h2>
+    <div class="row">
+      <input class="from" id="cfrom" placeholder="name" value="Jess">
+      <input class="msg" id="cmsg" placeholder="message" value="love this slot!">
+      <button id="send" disabled>Send</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const BACKEND="/simple-backend", PROFILE="CLOUDSLOT";
+const $=id=>document.getElementById(id);
+const status=t=>{ $('status').textContent=t||""; };
+const L=(...a)=>{ try{console.log("[cloudslot]",...a);}catch(e){} };
+let live=false, session="", appId="", muted=true, micTrack=null, cIn=null, cOut=null, sentReady=false;
+
+$('power').onclick=()=>{ live ? stop() : start(); };
+$('mic').onclick=async()=>{ muted=!muted; try{ if(micTrack) await micTrack.setMuted(muted); }catch(e){} $('mic').textContent=muted?'Unmute mic':'Mute mic'; };
+$('send').onclick=async()=>{
+  const from=$('cfrom').value.trim(), text=$('cmsg').value.trim(); if(!text||!session) return;
+  try{ await fetch(`${BACKEND}/director/events?session=${encodeURIComponent(session)}`,
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify([{type:'message',from,text}])}); $('cmsg').value=''; }
+  catch(e){ L("send err",e.message); }
+};
+
+function onFirstFrame(){
+  status("Host is live.");
+  if(sentReady) return; sentReady=true;
+  fetch(`${BACKEND}/director/status?session=${encodeURIComponent(session)}`,
+    {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clientVideoReady:true})}).catch(()=>{});
+}
+
+async function start(){
+  $('power').disabled=true; status("Starting…"); sentReady=false;
+  const game=encodeURIComponent($('game').value);
+  const avatar=encodeURIComponent(($('avatarid').value||'').trim());
+  try{
+    const d=await (await fetch(`${BACKEND}/director/start?profile=${PROFILE}&game=${game}&avatar=${avatar}`,{method:'POST'})).json();
+    if(!d.ok){ status("Error: "+(d.error||'start failed')+(d.tms&&d.tms.body?' — '+d.tms.body:'')); $('power').disabled=false; return; }
+    session=d.session; appId=d.appid;
+    if(d.output && d.input){
+      // TMS dual-channel: subscribe the composite on OUTPUT, publish mic on INPUT
+      cOut=AgoraRTC.createClient({mode:"rtc",codec:"vp8"});
+      cOut.on("user-published",async(user,mt)=>{ await cOut.subscribe(user,mt);
+        if(mt==="video"){ user.videoTrack.play("avatar"); onFirstFrame(); }
+        if(mt==="audio"){ user.audioTrack.play(); } });
+      await cOut.join(appId,d.output.channel,d.output.token,isNaN(+d.output.uid)?d.output.uid:+d.output.uid);
+      cIn=AgoraRTC.createClient({mode:"rtc",codec:"vp8"});
+      await cIn.join(appId,d.input.channel,d.input.token,isNaN(+d.input.uid)?d.input.uid:+d.input.uid);
+      try{ micTrack=await AgoraRTC.createMicrophoneAudioTrack(); await micTrack.setMuted(true); muted=true; await cIn.publish([micTrack]); $('mic').disabled=false; $('mic').textContent='Unmute mic'; }catch(e){ L("mic",e.message); }
+      status("Live — waiting for the avatar video…");
+    } else {
+      // single-channel fallback (TMS not configured): subscribe avatar 102 + raw agent audio 100
+      const AV=String(d.avatarUid||"102"), AG="100"; let raw=null, vid=false;
+      cOut=AgoraRTC.createClient({mode:"rtc",codec:"vp8"});
+      cOut.on("user-published",async(user,mt)=>{ const u=String(user.uid); if(u!==AV&&u!==AG) return; await cOut.subscribe(user,mt);
+        if(u===AV){ if(mt==="video"){ user.videoTrack.play("avatar"); vid=true; try{if(raw)raw.stop();}catch(e){} onFirstFrame(); } if(mt==="audio"){ user.audioTrack.play(); } }
+        else if(u===AG&&mt==="audio"){ raw=user.audioTrack; if(!vid){ try{raw.play();}catch(e){} status("Live (raw host audio; TMS video pending)."); } } });
+      await cOut.join(appId,d.session,d.userToken,isNaN(+d.userUid)?d.userUid:+d.userUid);
+      try{ micTrack=await AgoraRTC.createMicrophoneAudioTrack(); await micTrack.setMuted(true); muted=true; await cOut.publish([micTrack]); $('mic').disabled=false; }catch(e){}
+    }
+    live=true; $('power').textContent='Stop'; $('power').className='stop'; $('power').disabled=false; $('send').disabled=false; $('game').disabled=true; $('avatarid').disabled=true;
+  }catch(e){ status("Error: "+(e.message||e)); $('power').disabled=false; }
+}
+
+async function stop(){
+  $('power').disabled=true;
+  try{ await fetch(`${BACKEND}/director/stop?session=${encodeURIComponent(session)}&profile=${PROFILE}`,{method:'POST'}); }catch(e){}
+  try{ if(micTrack){ micTrack.stop(); micTrack.close(); } }catch(e){}
+  try{ if(cIn) await cIn.leave(); }catch(e){}
+  try{ if(cOut) await cOut.leave(); }catch(e){}
+  live=false; micTrack=null; cIn=null; cOut=null; $('avatar').innerHTML='';
+  $('power').textContent='Start'; $('power').className=''; $('power').disabled=false; $('send').disabled=true;
+  $('mic').disabled=true; $('game').disabled=false; $('avatarid').disabled=false;
+  status("Stopped. Pick a game and press Start.");
+}
+window.addEventListener('pagehide',()=>{ try{ if(session) navigator.sendBeacon(`${BACKEND}/director/stop?session=${encodeURIComponent(session)}&profile=${PROFILE}`); }catch(e){} });
+</script>
+</body></html>

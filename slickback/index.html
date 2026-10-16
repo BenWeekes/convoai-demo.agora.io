@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slickback — Director Console</title>
+<script src="https://download.agora.io/sdk/release/AgoraRTC_N-4.23.0.js"></script>
+<script src="/slickback/agora-rtm.js"></script>
+<style>
+  :root{color-scheme:dark;}*{box-sizing:border-box;}
+  body{margin:0;background:#0c0e14;color:#e8e8ee;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;}
+  header{padding:12px 16px;background:#13161f;border-bottom:1px solid #222736;display:flex;align-items:center;gap:12px;}
+  header h1{font-size:16px;margin:0;font-weight:700;letter-spacing:.3px;}
+  .pill{font-size:12px;color:#9aa3b2;}
+  .wrap{display:grid;grid-template-columns:1fr 360px;gap:16px;max-width:1100px;margin:0 auto;padding:16px;}
+  @media(max-width:820px){.wrap{grid-template-columns:1fr;}}
+  .card{background:#11141d;border:1px solid #222736;border-radius:12px;padding:14px;}
+  .card h2{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:#8b93a5;margin:0 0 10px;}
+  textarea{width:100%;height:460px;background:#0c0e14;border:1px solid #2a3040;border-radius:8px;color:#e8e8ee;
+    padding:11px 12px;font-family:ui-monospace,Menlo,monospace;font-size:13px;line-height:1.5;resize:vertical;}
+  .controls{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap;}
+  button{border:0;border-radius:9px;padding:11px 20px;font-weight:700;font-size:14px;cursor:pointer;background:#4a7dff;color:#fff;}
+  button.sec{background:#262b38;}button.stop{background:#c23b3b;}button:disabled{opacity:.45;cursor:default;}
+  /* avatar on the right, portrait */
+  #avatar{width:100%;aspect-ratio:2/3;background:#000;border-radius:12px;overflow:hidden;}
+  #avatar video{width:100%;height:100%;object-fit:cover;}
+  .status{font-size:13px;color:#9aa3b2;min-height:18px;margin-top:10px;}
+  .dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:#444;margin-right:6px;vertical-align:middle;}
+  .dot.on{background:#39d98a;box-shadow:0 0 8px #39d98a;}
+</style></head>
+<body>
+<header>
+  <h1>SLICKBACK</h1><span class="pill">director console</span>
+  <span style="margin-left:auto" class="pill"><span class="dot" id="spkdot"></span><span id="spklbl">idle</span></span>
+</header>
+<div class="wrap">
+  <div class="card">
+    <h2>Send JSON to the director</h2>
+    <textarea id="json"></textarea>
+    <div class="controls">
+      <button id="send" disabled>Send</button>
+      <button id="power">Start</button>
+      <button id="mic" class="sec" disabled>Unmute mic</button>
+    </div>
+    <div class="status" id="status">Press Start to bring the host live.</div>
+  </div>
+  <div class="card">
+    <h2>Host</h2>
+    <div id="avatar"></div>
+  </div>
+</div>
+
+<script>
+const BACKEND="/simple-backend", PROFILE="SLICKBACK";
+const $=id=>document.getElementById(id);
+const status=t=>{ $('status').textContent=t||""; };
+const L=(...a)=>{ try{console.log("[slickback]",...a);}catch(e){} };
+let live=false, session="", client=null, rtm=null, micTrack=null, muted=true, appId="", avatarUid="102";
+
+const DEFAULT_JSON=JSON.stringify([
+  {"type":"message","from":"Alex","text":"Hey, how's it going?"},
+  {"type":"message","from":"Sam","text":"Good luck everyone!"}
+], null, 2);
+$('json').value=DEFAULT_JSON;
+
+$('power').onclick=()=>{ live ? stop() : start(); };
+$('mic').onclick=async()=>{ muted=!muted; try{ if(micTrack) await micTrack.setMuted(muted); }catch(e){} $('mic').textContent=muted?'Unmute mic':'Mute mic'; };
+$('send').onclick=async()=>{
+  if(!session) return; let body;
+  try{ body=JSON.parse($('json').value); }catch(e){ status("Invalid JSON: "+e.message); return; }
+  try{ const r=await (await fetch(`${BACKEND}/director/events?session=${encodeURIComponent(session)}`,
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})).json();
+    status("Sent "+(r.added!=null?r.added:'?')+" event(s)."); }
+  catch(e){ status("Send error: "+e.message); }
+};
+
+async function start(){
+  $('power').disabled=true; status("Starting…");
+  try{
+    const d=await (await fetch(`${BACKEND}/director/start?profile=${PROFILE}`,{method:'POST'})).json();
+    if(!d.ok){ status("Error: "+(d.error||'start failed')); $('power').disabled=false; return; }
+    session=d.session; appId=d.appid; avatarUid=String(d.avatarUid||"102");
+    const AGENT_AUDIO_UID="100"; let rawAudio=null, avVideo=false;
+    client=AgoraRTC.createClient({mode:"rtc",codec:"vp8"});
+    client.on("user-published",async(user,mt)=>{
+      const uid=String(user.uid); if(uid!==avatarUid&&uid!==AGENT_AUDIO_UID) return;
+      await client.subscribe(user,mt);
+      if(uid===avatarUid){ if(mt==="video"){ user.videoTrack.play("avatar"); avVideo=true; try{if(rawAudio)rawAudio.stop();}catch(e){} status("Host is live."); } if(mt==="audio"){ user.audioTrack.play(); } }
+      else if(uid===AGENT_AUDIO_UID && mt==="audio"){ rawAudio=user.audioTrack; if(!avVideo){ try{rawAudio.play();}catch(e){} } }
+    });
+    await client.join(appId,session,d.userToken,isNaN(+d.userUid)?d.userUid:+d.userUid);
+    try{ micTrack=await AgoraRTC.createMicrophoneAudioTrack(); await micTrack.setMuted(true); muted=true; await client.publish([micTrack]); $('mic').disabled=false; $('mic').textContent='Unmute mic'; }catch(e){ L("mic",e.message); }
+    startRtm(appId,d.userRtmUid||String(d.userUid),d.userToken);
+    live=true; $('power').textContent='Stop'; $('power').className='stop'; $('power').disabled=false; $('send').disabled=false;
+    status("Live — edit the JSON and Send.");
+  }catch(e){ status("Error: "+(e.message||e)); $('power').disabled=false; }
+}
+async function startRtm(appid,rtmUid,token){
+  try{ rtm=new AgoraRTM.RTM(appid,String(rtmUid),{logLevel:'error'}); await rtm.login({token});
+    await rtm.subscribe(session,{withMessage:true,withPresence:false});
+    rtm.addEventListener('message',ev=>{ let m; try{ m=(typeof ev.message==='string')?JSON.parse(ev.message):ev.message; }catch(e){ return; } if(!m) return;
+      const et=String(m.event_type||m.object||''); if(/(^|\.)speaking$/i.test(et)&&m.payload&&typeof m.payload.value==='boolean'){
+        const sp=m.payload.value; $('spkdot').classList.toggle('on',sp); $('spklbl').textContent=sp?'speaking':'idle';
+        fetch(`${BACKEND}/director/speaking?session=${encodeURIComponent(session)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({speaking:sp})}).catch(()=>{}); } });
+  }catch(e){ L("rtm",e.message); }
+}
+async function stop(){
+  $('power').disabled=true;
+  try{ await fetch(`${BACKEND}/director/stop?session=${encodeURIComponent(session)}&profile=${PROFILE}`,{method:'POST'}); }catch(e){}
+  try{ if(micTrack){ micTrack.stop(); micTrack.close(); } }catch(e){}
+  try{ if(client) await client.leave(); }catch(e){}
+  try{ if(rtm) await rtm.logout(); }catch(e){}
+  live=false; micTrack=null; client=null; rtm=null; $('avatar').innerHTML='';
+  $('power').textContent='Start'; $('power').className=''; $('power').disabled=false; $('send').disabled=true;
+  $('mic').disabled=true; $('spkdot').classList.remove('on'); $('spklbl').textContent='idle';
+  status("Stopped. Press Start to go live again.");
+}
+window.addEventListener('pagehide',()=>{ try{ if(session) navigator.sendBeacon(`${BACKEND}/director/stop?session=${encodeURIComponent(session)}&profile=${PROFILE}`); }catch(e){} });
+</script>
+</body></html>
