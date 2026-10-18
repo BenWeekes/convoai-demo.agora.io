@@ -51,9 +51,11 @@ generic vendors. Happy to re-test any changes.
 
 ## Feature request: arbitrary output width/height (resolution passthrough)
 
-We'd like to request **any width/height** for the avatar's published video. Proposal: carry a
-**`video_settings`** object in the avatar-join block (the `POST {api_base}/session/start` body) AND in
-the WS `init` message — consistent with HeyGen LiveAvatar's `video_settings` and Anam's width/height.
+We'd like to request **any width/height** for the avatar's published video. Proposal: carry **`width`,
+`height` (and optional `fps`) as fields in the avatar block** of the join request (`POST
+{api_base}/session/start` body) AND the WS `init` — i.e. the **same mechanism** by which LemonSlice lets
+clients choose `aspect_ratio` / `model` (those are plain fields in the same body). Flat fields, not a
+nested object.
 
 **Example `session/start` (avatar join) body:**
 ```json
@@ -62,20 +64,23 @@ the WS `init` message — consistent with HeyGen LiveAvatar's `video_settings` a
   "quality": "high",
   "version": "v1",
   "video_encoding": "H264",
+  "aspect_ratio": "9x16",
+  "width": 1080,
+  "height": 1920,
+  "fps": 30,
   "agora_settings": {
     "app_id": "<agora app id>",
     "token": "<agora rtc token>",
     "channel": "<channel>",
     "uid": 102,
     "enable_string_uid": false
-  },
-  "video_settings": { "width": 1080, "height": 1920, "fps": 30 }
+  }
 }
 ```
 
 Suggested semantics:
 - `width`/`height` in **pixels**, any values the renderer supports (portrait, landscape, square, etc.);
-  `fps` optional (default 30).
+  `fps` optional (default 30). Same avatar-block level as `aspect_ratio` / `model`.
 - **Echo the negotiated resolution back** in the `session/start` response (e.g.
   `"video": {"width":1080,"height":1920,"fps":30}`) so the client knows what will be published and can
   reject/adjust if the request was clamped.
