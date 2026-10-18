@@ -59,18 +59,22 @@ The drive scripts source them from there; `avatar-direct/env.sh` (gitignored) ho
 creds. **Protoface's custom avatar is on a DIFFERENT account** than the backend `PROTOFACE_*` profile —
 use `FGRID_PROTOFACE_API_KEY`, not `PROTOFACE_AVATAR_API_KEY`.
 
-## HeyGen — direct drive (drive_heygen.py)
-HeyGen CAN publish straight to an Agora channel (no LiveKit bridge): its streaming API supports
-`version:"agora_v1"` with `agora_settings`. `avatar-direct/drive_heygen.py` implements the
-TEN-framework flow (`github.com/TEN-framework/ten-framework .../heygen_avatar_python`):
-`POST /v1/streaming.create_token` (x-api-key) → `POST /v1/streaming.new` (Bearer; `avatar_name`,
-`version:agora_v1`, `agora_settings{app_id,token,channel,uid}`, `namespace:demo`) →
-`/v1/streaming.start` → WS `{"type":"agent.speak","audio":<b64 **24k mono PCM16**>,"event_id"}` …
-`{"type":"agent.speak_end"}` → `/v1/streaming.stop`. recv_av records uid 102.
+## HeyGen — direct drive (drive_heygen.py) ✓ WORKS
+HeyGen's current streaming product is **"Live Avatar"** — a SEPARATE API at **`https://api.liveavatar.com/v1`**
+(NOT `api.heygen.com/v1/streaming.*`, which 404s/401s — that's the old/legacy path). It publishes
+straight to an Agora channel. `avatar-direct/drive_heygen.py` implements the TEN-framework
+`heygen_avatar_python` flow:
+`POST /sessions/token` (header `x-api-key`) with `{mode:"CUSTOM", avatar_id, video_settings:{quality},
+agora_config:{agora_app_id,agora_token,agora_channel,agora_uid}}` → `data.session_id` + `data.session_token`
+→ `POST /sessions/start` (header `authorization: Bearer <session_token>`, body `{}`) → `data.ws_url`
+→ WS: `{"type":"agent.speak","audio":<b64 **24 kHz** mono PCM16>}` (~60ms frames) + `{"type":"session.keep_alive"}`
+every 10s, then `{"type":"agent.speak_end","event_id"}` → `POST /sessions/stop` (`x-api-key`). recv_av
+records uid 102. **Audio MUST be 24000 Hz** (`SUPPORTED_SAMPLE_RATES=[24000]`).
 ```bash
 WORK=/tmp/fgrid/heygen HEYGEN_API_KEY=$FGRID_HEYGEN_API_KEY AVATAR_ID=$FGRID_HEYGEN_AVATAR_ID \
   WAV=/tmp/fgrid/f_24k.wav python3 drive_heygen.py
 ```
+Reference impl kept at `~/heygen.py` + `~/extension.py` (TEN-framework).
 
 ## Vendor gotchas (this build)
 - **Tavus** `r…` is a **replica** id; the `/v2/conversations/agora` WS can be slow to come up (saw a
@@ -78,9 +82,10 @@ WORK=/tmp/fgrid/heygen HEYGEN_API_KEY=$FGRID_HEYGEN_API_KEY AVATAR_ID=$FGRID_HEY
 - **Protoface** `av_01M3KSSV…` needs its **own account key** (`FGRID_PROTOFACE_API_KEY=sk_live_I3RF…`);
   with the backend's `PROTOFACE_AVATAR_API_KEY` it 400s `avatar.not_found`. With the right key it
   renders (crop `480:286:0:80` to drop the "Powered by Protoface" watermark).
-- **HeyGen** — the driver exists (above); needs a **valid HeyGen API key** (Settings → API, a long
-  base64 string, NOT a UUID — a UUID returns 401 `Unauthorized`). NB HeyGen v1/v2 are legacy (removed
-  2026-10-31); if v1 `streaming.*` 404s later, migrate to the v3 streaming API.
+- **HeyGen** ✓ works via the **LiveAvatar** API (above). KEY GOTCHA: the key goes to
+  `api.liveavatar.com`, NOT `api.heygen.com` — on `api.heygen.com` the same key returns 401
+  `Unauthorized` / the `streaming.*` paths 404. The `FGRID_HEYGEN_API_KEY` UUID is correct *for
+  LiveAvatar*. Output is 854×480.
 - **Trulience** is export-only — supply a fresh f.m4a export or omit it.
 
 See `vendor-grid.md` (the TTS/export comparison grid + heart recolor + blind `/avatar-compare/` publish)
