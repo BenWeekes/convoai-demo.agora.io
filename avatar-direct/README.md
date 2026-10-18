@@ -203,8 +203,23 @@ Common edits:
   cp q2g_lemon.mp4 $W/q2g.mp4; cp q5_regen.mp4 $W/q5.mp4; cp q3_cartoon.mp4 $W/q3.mp4; …   # one per cell
   SKIP_DRIVE=1 OUT=$W/grid.mp4 WORKROOT=$W ./build_grid.sh      # just align + xstack, ~1-2 min
   ```
-  A cartoon cell clip is portrait (446×720) and is top-cropped to square by the `|cartoon` flag on its
-  `AVATARS` line; standard cells are already 540². This is how the shipped grid was built.
+  A cartoon cell clip is portrait (446×720); standard cells are already 540².
+
+**Cartoon cells — blurred-fill (preferred over top-crop).** A `2x3` cartoon clip doesn't fill a square
+cell. Top-cropping (`|cartoon` flag) keeps the head but loses the legs. The **shipped grid** instead
+**fits the whole character** and fills the sides with a blurred copy of its own frame (no black bars) —
+pre-square each cartoon clip before the compose-only step:
+```bash
+blurfill(){ ffmpeg -y -i "$1" -filter_complex \
+"[0:v]split=2[bg][fg];\
+ [bg]scale=540:540:force_original_aspect_ratio=increase,crop=540:540,gblur=sigma=20[bgb];\
+ [fg]scale=540:540:force_original_aspect_ratio=decrease[fgs];\
+ [bgb][fgs]overlay=(W-w)/2:(H-h)/2,setsar=1[v]" \
+ -map "[v]" -map 0:a -c:v libx264 -crf 18 -pix_fmt yuv420p -c:a aac "$2"; }
+blurfill q3_cartoon.mp4 $W/q3.mp4      # 540² with full character + blurred sides
+blurfill q6_cartoon.mp4 $W/q6.mp4
+```
+These are now already-square 540² clips, so the `|cartoon` top-crop is a harmless no-op on them.
 
 Output defaults to `$OUT` (env; else `benb_grid.mp4`); copy it to `web/uploads/benbgrid/` to publish
 (that dir is gitignored — large media isn't committed).

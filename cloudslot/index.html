@@ -56,7 +56,7 @@ const BACKEND="https://convoai-demo.agora.io/simple-backend", PROFILE="CLOUDSLOT
 const $=id=>document.getElementById(id);
 const status=t=>{ $('status').textContent=t||""; };
 const L=(...a)=>{ try{console.log("[cloudslot]",...a);}catch(e){} };
-let live=false, session="", appId="", muted=true, micTrack=null, cIn=null, cOut=null, sentReady=false;
+let live=false, session="", appId="", muted=true, micTrack=null, cIn=null, cOut=null, sentReady=false, role="";
 
 $('power').onclick=()=>{ live ? stop() : start(); };
 $('mic').onclick=async()=>{ muted=!muted; try{ if(micTrack) await micTrack.setMuted(muted); }catch(e){} $('mic').textContent=muted?'Unmute mic':'Mute mic'; };
@@ -81,18 +81,24 @@ async function start(){
   try{
     const d=await (await fetch(`${BACKEND}/director/start?profile=${PROFILE}&game=${game}&avatar=${avatar}`,{method:'POST'})).json();
     if(!d.ok){ status("Error: "+(d.error||'start failed')+(d.tms&&d.tms.body?' — '+d.tms.body:'')); $('power').disabled=false; return; }
-    session=d.session; appId=d.appid;
-    if(d.output && d.input){
-      // TMS dual-channel: subscribe the composite on OUTPUT, publish mic on INPUT
+    session=d.session; appId=d.appid; role=d.role||"operator";
+    if(d.output){
+      // One-to-many: EVERYONE subscribes the composite on OUTPUT. Only the operator (gets d.input)
+      // publishes the mic — viewers just watch the one shared avatar + game.
       cOut=AgoraRTC.createClient({mode:"rtc",codec:"vp8"});
       cOut.on("user-published",async(user,mt)=>{ await cOut.subscribe(user,mt);
         if(mt==="video"){ user.videoTrack.play("avatar"); onFirstFrame(); }
         if(mt==="audio"){ user.audioTrack.play(); } });
       await cOut.join(appId,d.output.channel,d.output.token,isNaN(+d.output.uid)?d.output.uid:+d.output.uid);
-      cIn=AgoraRTC.createClient({mode:"rtc",codec:"vp8"});
-      await cIn.join(appId,d.input.channel,d.input.token,isNaN(+d.input.uid)?d.input.uid:+d.input.uid);
-      try{ micTrack=await AgoraRTC.createMicrophoneAudioTrack(); await micTrack.setMuted(true); muted=true; await cIn.publish([micTrack]); $('mic').disabled=false; $('mic').textContent='Unmute mic'; }catch(e){ L("mic",e.message); }
-      status("Live — waiting for the avatar video…");
+      if(d.input){
+        cIn=AgoraRTC.createClient({mode:"rtc",codec:"vp8"});
+        await cIn.join(appId,d.input.channel,d.input.token,isNaN(+d.input.uid)?d.input.uid:+d.input.uid);
+        try{ micTrack=await AgoraRTC.createMicrophoneAudioTrack(); await micTrack.setMuted(true); muted=true; await cIn.publish([micTrack]); $('mic').disabled=false; $('mic').textContent='Unmute mic'; }catch(e){ L("mic",e.message); }
+        status("Live — you're hosting the table. Waiting for the avatar video…");
+      } else {
+        $('mic').disabled=true;
+        status("Live — viewing (another host is running the table).");
+      }
     } else {
       // single-channel fallback (TMS not configured): subscribe avatar 102 + raw agent audio 100
       const AV=String(d.avatarUid||"102"), AG="100"; let raw=null, vid=false;
@@ -103,21 +109,22 @@ async function start(){
       await cOut.join(appId,d.session,d.userToken,isNaN(+d.userUid)?d.userUid:+d.userUid);
       try{ micTrack=await AgoraRTC.createMicrophoneAudioTrack(); await micTrack.setMuted(true); muted=true; await cOut.publish([micTrack]); $('mic').disabled=false; }catch(e){}
     }
-    live=true; $('power').textContent='Stop'; $('power').className='stop'; $('power').disabled=false; $('send').disabled=false; $('game').disabled=true; $('avatarid').disabled=true;
+    live=true; $('power').textContent=(role==="viewer"?'Leave':'Stop'); $('power').className='stop'; $('power').disabled=false; $('send').disabled=false; $('game').disabled=true; $('avatarid').disabled=true;
   }catch(e){ status("Error: "+(e.message||e)); $('power').disabled=false; }
 }
 
 async function stop(){
   $('power').disabled=true;
-  try{ await fetch(`${BACKEND}/director/stop?session=${encodeURIComponent(session)}&profile=${PROFILE}`,{method:'POST'}); }catch(e){}
+  // only the operator tears down the shared session; a viewer just leaves
+  if(role!=="viewer"){ try{ await fetch(`${BACKEND}/director/stop?session=${encodeURIComponent(session)}&profile=${PROFILE}`,{method:'POST'}); }catch(e){} }
   try{ if(micTrack){ micTrack.stop(); micTrack.close(); } }catch(e){}
   try{ if(cIn) await cIn.leave(); }catch(e){}
   try{ if(cOut) await cOut.leave(); }catch(e){}
-  live=false; micTrack=null; cIn=null; cOut=null; $('avatar').innerHTML='';
+  live=false; role=""; micTrack=null; cIn=null; cOut=null; $('avatar').innerHTML='';
   $('power').textContent='Start'; $('power').className=''; $('power').disabled=false; $('send').disabled=true;
   $('mic').disabled=true; $('game').disabled=false; $('avatarid').disabled=false;
-  status("Stopped. Pick a game and press Start.");
+  status("Pick a game and press Start.");
 }
-window.addEventListener('pagehide',()=>{ try{ if(session) navigator.sendBeacon(`${BACKEND}/director/stop?session=${encodeURIComponent(session)}&profile=${PROFILE}`); }catch(e){} });
+window.addEventListener('pagehide',()=>{ try{ if(session && role!=="viewer") navigator.sendBeacon(`${BACKEND}/director/stop?session=${encodeURIComponent(session)}&profile=${PROFILE}`); }catch(e){} });
 </script>
 </body></html>
