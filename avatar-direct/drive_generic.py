@@ -38,6 +38,16 @@ API_KEY  = os.environ["API_KEY"]
 AVATAR   = os.environ["AVATAR_ID"]
 ASPECT   = os.environ.get("ASPECT", "")   # e.g. "1x1" / "3x2" (LemonSlice aspect hint)
 MODEL    = os.environ.get("MODEL", "")    # e.g. "cartoon" (LemonSlice model variant; empty = default)
+VIDEO_W  = os.environ.get("VIDEO_W", "")  # arbitrary output resolution passthrough (-> video_settings)
+VIDEO_H  = os.environ.get("VIDEO_H", "")
+VIDEO_FPS = os.environ.get("VIDEO_FPS", "30")
+
+
+def _video_settings():
+    # passthrough resolution block for providers that support arbitrary width/height (e.g. Trulience)
+    if VIDEO_W and VIDEO_H:
+        return {"width": int(VIDEO_W), "height": int(VIDEO_H), "fps": int(VIDEO_FPS)}
+    return None
 HERE = os.path.dirname(os.path.abspath(__file__))
 WAV  = os.environ.get("WAV", os.path.join(HERE, "input_24k.wav"))
 WORK = os.environ.get("WORK", os.path.join(HERE, "work")); os.makedirs(WORK, exist_ok=True)
@@ -64,6 +74,8 @@ def start_session():
           "activity_idle_timeout":120,"area":"NORTH_AMERICA","agora_settings":agora_settings()}
     if ASPECT: body["aspect_ratio"]=ASPECT
     if MODEL:  body["model"]=MODEL
+    _vs=_video_settings()
+    if _vs: body["video_settings"]=_vs
     r=requests.post(f"{API_BASE}/session/start",
                     headers={"x-api-key":API_KEY,"content-type":"application/json"},
                     json=body, timeout=90)
@@ -88,6 +100,8 @@ async def run_ws(ws_addr, sid):
           "agora_settings":agora_settings()}
     if ASPECT: init["aspect_ratio"]=ASPECT
     if MODEL:  init["model"]=MODEL
+    _vs=_video_settings()
+    if _vs: init["video_settings"]=_vs
     await ws.send(json.dumps(init)); print("init sent")
     async def listen():
         try:

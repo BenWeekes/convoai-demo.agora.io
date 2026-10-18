@@ -46,3 +46,43 @@ LemonSlice / Tavus / Protoface. 🎉
 
 Nothing above blocks use — the integration is working. These are just parity items with the other
 generic vendors. Happy to re-test any changes.
+
+---
+
+## Feature request: arbitrary output width/height (resolution passthrough)
+
+We'd like to request **any width/height** for the avatar's published video. Proposal: carry a
+**`video_settings`** object in the avatar-join block (the `POST {api_base}/session/start` body) AND in
+the WS `init` message — consistent with HeyGen LiveAvatar's `video_settings` and Anam's width/height.
+
+**Example `session/start` (avatar join) body:**
+```json
+{
+  "avatar_id": "5933209494856748618",
+  "quality": "high",
+  "version": "v1",
+  "video_encoding": "H264",
+  "agora_settings": {
+    "app_id": "<agora app id>",
+    "token": "<agora rtc token>",
+    "channel": "<channel>",
+    "uid": 102,
+    "enable_string_uid": false
+  },
+  "video_settings": { "width": 1080, "height": 1920, "fps": 30 }
+}
+```
+
+Suggested semantics:
+- `width`/`height` in **pixels**, any values the renderer supports (portrait, landscape, square, etc.);
+  `fps` optional (default 30).
+- **Echo the negotiated resolution back** in the `session/start` response (e.g.
+  `"video": {"width":1080,"height":1920,"fps":30}`) so the client knows what will be published and can
+  reject/adjust if the request was clamped.
+- If a requested size is unsupported, return a clear error (or clamp and report the actual size).
+- Keep it a nested object so future params (e.g. `background`/alpha, `bitrate`) can be added without
+  breaking the top level.
+
+Our generic client already sends this when configured — e.g.
+`VIDEO_W=1080 VIDEO_H=1920 VIDEO_FPS=30 … python3 drive_generic.py` → adds the `video_settings` block
+to both `session/start` and `init`. Just let us know the object/field names you settle on and we'll align.
