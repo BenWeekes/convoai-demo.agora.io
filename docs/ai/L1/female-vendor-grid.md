@@ -9,10 +9,15 @@ grid (`vendor-grid.md`), which synced each tile to a channel-recorded anam refer
 Use this when the ask is "same woman, driven by a real voice clip, compare the vendors."
 
 ## Inputs
-- **Audio:** `~/f.m4a` (~34.6s). `ffmpeg -i ~/f.m4a -ac 1 -ar 24000 -c:a pcm_s16le /tmp/fgrid/f_24k.wav`
-  — 24 kHz mono PCM16, the drive format AND the final mux audio.
-- **Source image (LemonSlice):** `~/sa.png` (the heart-shirt woman) → host it (LemonSlice needs a URL):
-  `cp ~/sa.png web/uploads/fgrid/sa.png` → `https://convoai-demo.agora.io/photo-uploads/fgrid/sa.png`.
+- **Audio (two sources, both preserved in `web/uploads/fgrid/` — gitignored but committed):**
+  - `f.m4a` (~34.6s) — the **new human voice** this grid was built with.
+  - `pp.m4a` (~19s) — the **original "purple peaches" track** the first vendor grid used (for
+    regression / reproducing the original). Drives an older *different* avatar (bedroom/camisole woman),
+    not this heart-shirt one — see `vendor-grid.md` + the chinese-vendor-grid memory.
+  - Convert either to the drive format: `ffmpeg -i <audio> -ac 1 -ar 24000 -c:a pcm_s16le out_24k.wav`
+    → **24 kHz mono PCM16** (required by HeyGen/LiveAvatar; also the final mux audio).
+- **Source image (LemonSlice):** `sa.png` (the heart-shirt woman) hosted at
+  `https://convoai-demo.agora.io/photo-uploads/fgrid/sa.png` (in `web/uploads/fgrid/`).
 
 ## Per-vendor avatar IDs (the female heart-shirt avatar)
 | Vendor | Avatar id | Driver | Notes |
@@ -21,12 +26,12 @@ Use this when the ask is "same woman, driven by a real voice clip, compare the v
 | **Anam** | `c289b176-1bc1-4303-96aa-1343f58a1710` | `drive_anam.py` (`cara-4`) | Anam avatar IS the same woman ✓ |
 | **Tavus** | `r69627e4e455` (replica) | `drive_generic.py` | female replica — NOT the default demo persona `p0f105b5b82e` (a man) |
 | **Protoface** | `av_01M3KSSV6D8Z37AGD44Q2VPSC1` | `drive_generic.py` | female custom avatar — NOT `av_stock_001` (a man + watermark) |
-| **HeyGen** | `c9c3b3b6-70de-4b61-8c27-8a7e48cc92a4` | (see HeyGen note) | female avatar |
-| **Trulience** | — | EXPORT-ONLY | hand-rendered mp4; can't be driven with new audio |
+| **HeyGen** | `c9c3b3b6-70de-4b61-8c27-8a7e48cc92a4` | `drive_heygen.py` (LiveAvatar) | female avatar ✓ (see HeyGen section) |
+| **Trulience** | `5933209494856748618` | `drive_generic.py` | ✓ **generic now works** — endpoint `https://agora-pub.trulience.com/native-provider` speaks the SAME protocol (no longer export-only) |
 
-Keys live in `.env` (`TAVUS_AVATAR_API_KEY`, `PROTOFACE_AVATAR_API_KEY`) / `avatar-direct/env.sh`
-(`LS_KEY`, `ANAM_KEY`). The default `TAVUS`/`PROTOFACE` backend profiles point at MALE demo avatars —
-do not reuse them for this grid.
+All 6 are DIRECT-DRIVABLE (no ConvoAI, no exports). Keys/ids live in the private
+`convoai-simple-backend/.env` `FGRID_*` block; `avatar-direct/env.sh` (gitignored) holds Agora/LS/Anam
+creds. The default `TAVUS`/`PROTOFACE` *backend profiles* point at MALE demo avatars — do not reuse them.
 
 ## Build each cell (driven by f_24k.wav)
 `cd avatar-direct && source env.sh`; each cell: drive → `recv_av` records the channel A/V →
@@ -40,9 +45,13 @@ WORK=/tmp/fgrid/lemon AVATAR_ID=$UP/sa.png API_BASE=https://lemonslice.com/api/l
 WORK=/tmp/fgrid/anam  AVATAR_ID=c289b176-1bc1-4303-96aa-1343f58a1710 API_KEY=$ANAM_KEY ANAM_MODEL=cara-4 ANAM_EXPRESSIVITY=0.8 python3 drive_anam.py
 # Tavus (TAVUS_AVATAR_API_KEY from .env)
 WORK=/tmp/fgrid/tavus AVATAR_ID=r69627e4e455 API_BASE=https://tavusapi.com/v2/conversations/agora API_KEY=$TKEY python3 drive_generic.py
-# Protoface (PROTOFACE_AVATAR_API_KEY)  — crop 480:286:0:80 later to drop the watermark
-WORK=/tmp/fgrid/proto AVATAR_ID=av_01M3KSSV6D8Z37AGD44Q2VPSC1 API_BASE=https://api.protoface.com/v1/agora/ API_KEY=$PKEY python3 drive_generic.py
-# then: WORK=/tmp/fgrid/<v> python3 compose_native.py /tmp/fgrid/<v>.mp4 480
+# Protoface — use FGRID_PROTOFACE_API_KEY (its own account); top-crop later to drop the watermark
+WORK=/tmp/fgrid/proto AVATAR_ID=$FGRID_PROTOFACE_AVATAR_ID API_BASE=https://api.protoface.com/v1/agora/ API_KEY=$FGRID_PROTOFACE_API_KEY python3 drive_generic.py
+# HeyGen — LiveAvatar (NOT api.heygen.com); see the HeyGen section below
+WORK=/tmp/fgrid/heygen HEYGEN_API_KEY=$FGRID_HEYGEN_API_KEY AVATAR_ID=$FGRID_HEYGEN_AVATAR_ID python3 drive_heygen.py
+# Trulience — generic native-provider (same protocol as LemonSlice)
+WORK=/tmp/fgrid/trl AVATAR_ID=$FGRID_TRULIENCE_AVATAR_ID API_BASE=$FGRID_TRULIENCE_BASE_URL API_KEY=$FGRID_TRULIENCE_API_KEY python3 drive_generic.py
+# then compose each: WORK=/tmp/fgrid/<v> python3 compose_native.py /tmp/fgrid/<v>.mp4 480
 ```
 
 ## Mux
@@ -54,7 +63,8 @@ speech lines up. `xstack` the cells (crop/scale to a common tile, Protoface wate
 ## Credentials
 All female-grid vendor keys + avatar ids live in the **private** `convoai-simple-backend/.env` under the
 `FGRID_*` block (`FGRID_HEYGEN_API_KEY`, `FGRID_HEYGEN_AVATAR_ID`, `FGRID_PROTOFACE_API_KEY`,
-`FGRID_PROTOFACE_AVATAR_ID`, `FGRID_TAVUS_AVATAR_ID`, `FGRID_ANAM_AVATAR_ID`, `FGRID_LEMON_IMAGE`).
+`FGRID_PROTOFACE_AVATAR_ID`, `FGRID_TAVUS_AVATAR_ID`, `FGRID_ANAM_AVATAR_ID`, `FGRID_LEMON_IMAGE`,
+`FGRID_TRULIENCE_BASE_URL`, `FGRID_TRULIENCE_API_KEY`, `FGRID_TRULIENCE_AVATAR_ID`).
 The drive scripts source them from there; `avatar-direct/env.sh` (gitignored) holds the Agora/LS/Anam
 creds. **Protoface's custom avatar is on a DIFFERENT account** than the backend `PROTOFACE_*` profile —
 use `FGRID_PROTOFACE_API_KEY`, not `PROTOFACE_AVATAR_API_KEY`.
@@ -86,7 +96,10 @@ Reference impl kept at `~/heygen.py` + `~/extension.py` (TEN-framework).
   `api.liveavatar.com`, NOT `api.heygen.com` — on `api.heygen.com` the same key returns 401
   `Unauthorized` / the `streaming.*` paths 404. The `FGRID_HEYGEN_API_KEY` UUID is correct *for
   LiveAvatar*. Output is 854×480.
-- **Trulience** is export-only — supply a fresh f.m4a export or omit it.
+- **Trulience** ✓ generic protocol works now (2026-10-18) — `API_BASE=https://agora-pub.trulience.com/native-provider`
+  with `drive_generic.py`, same as LemonSlice; publishes to the Agora channel, recorded by recv_av.
+  No longer export-only. Note: it sends NO server→client WS messages (no `init_ack`) — harmless but a
+  parity gap (see the test report `web/uploads/fgrid/trulience-generic-test.md`).
 
 See `vendor-grid.md` (the TTS/export comparison grid + heart recolor + blind `/avatar-compare/` publish)
 and `avatar-direct/README.md` (drivers, recorder, `compose_native`, A/V-sync rules).
