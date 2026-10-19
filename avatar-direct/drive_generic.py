@@ -41,6 +41,7 @@ MODEL    = os.environ.get("MODEL", "")    # e.g. "cartoon" (LemonSlice model var
 VIDEO_W  = os.environ.get("VIDEO_W", "")  # arbitrary output resolution passthrough (-> video_settings)
 VIDEO_H  = os.environ.get("VIDEO_H", "")
 VIDEO_FPS = os.environ.get("VIDEO_FPS", "30")
+ENVIRON  = os.environ.get("ENVIRONMENT", "")  # e.g. "staging" (provider env the avatar lives in)
 
 
 def _add_video(d):
@@ -75,6 +76,7 @@ def start_session():
     if ASPECT: body["aspect_ratio"]=ASPECT
     if MODEL:  body["model"]=MODEL
     _add_video(body)
+    if ENVIRON: body["environment"]=ENVIRON
     r=requests.post(f"{API_BASE}/session/start",
                     headers={"x-api-key":API_KEY,"content-type":"application/json"},
                     json=body, timeout=90)
@@ -100,6 +102,7 @@ async def run_ws(ws_addr, sid):
     if ASPECT: init["aspect_ratio"]=ASPECT
     if MODEL:  init["model"]=MODEL
     _add_video(init)
+    if ENVIRON: init["environment"]=ENVIRON
     await ws.send(json.dumps(init)); print("init sent")
     async def listen():
         try:

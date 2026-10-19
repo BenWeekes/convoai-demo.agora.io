@@ -58,6 +58,15 @@ WORK=$PWD/trl python3 compose_native.py trl.mp4 480     # reconstruct video + mu
 ```
 `trl.mp4` is the standalone recording to eyeball (its OWN audio ⇒ self-consistent lip-sync).
 
+## Avatar in the staging environment
+If the avatar lives in Trulience's **staging** env (e.g. `2908248967865453157`), add
+`ENVIRONMENT=staging` — the client sends `"environment":"staging"` as a field in the avatar block, and
+the avatar then renders. Without it the session is created but immediately stopped (no video).
+```bash
+ENVIRONMENT=staging WORK=$PWD/trl AVATAR_ID=2908248967865453157 \
+  API_BASE=https://agora-pub.trulience.com/native-provider API_KEY=<key> WAV=$PWD/in_24k.wav python3 drive_generic.py
+```
+
 ## Optional: arbitrary resolution (video_settings passthrough)
 Add `VIDEO_W`/`VIDEO_H`/`VIDEO_FPS` — the client sends a `video_settings:{width,height,fps}` block in
 `session/start` + `init` (see the resolution-passthrough proposal in our test report):
