@@ -18,6 +18,8 @@ Client apps live in their own repos and are cloned/built per `deploy.md`:
    - `demos.md` — each user-facing demo → URL → what it is → repo → deploy.md section.
    - `baccarat.md`, `signer-overlay.md`, `quiz-wheel.md`, `vendor-grid.md`, `h2a.md` — per-demo deep dives.
    - `rebuild.md` — order of operations to rebuild from scratch.
+   - `trulience-recorder-first.md` — native-provider onset test; shared generic
+     client and recorder under `avatar-direct/trulience-recorder-first/`.
 
 ## Secrets
 Never in git. Live in gitignored `.env` files: `agent-samples/simple-backend/.env` (profiles,

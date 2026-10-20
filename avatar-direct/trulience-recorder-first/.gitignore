@@ -1,0 +1,4 @@
+.work/
+.venv/
+__pycache__/
+recorder/__pycache__/

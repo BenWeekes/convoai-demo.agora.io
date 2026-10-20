@@ -1,5 +1,12 @@
 # Reproduce the Trulience generic-protocol test (for Trulience)
 
+**Current onset test (20 October 2026):**
+follow [trulience-recorder-first/README.md](trulience-recorder-first/README.md).
+The client, Go recorder, build helper and muxer are all in that directory.
+It joins the receiver before Start and sends real voice immediately after init,
+without a startup sleep or callback discard. Use existing private credentials.
+The instructions below describe the earlier vendor-comparison workflow.
+
 Run exactly what we ran: drive your avatar over the **convoai_to_video generic protocol**, have it
 publish into an Agora RTC channel, and record it. All scripts are in this `avatar-direct/` folder.
 

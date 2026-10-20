@@ -1,5 +1,11 @@
 # avatar-direct — drive avatar providers directly (no ConvoAI)
 
+For the Trulience opening-word regression, use
+[trulience-recorder-first/README.md](trulience-recorder-first/README.md).
+That test joins the recorder before Start and sends voice immediately after init,
+with no fixed warmup or callback discard. The vendor comparison workflows below
+retain their existing behavior.
+
 Call generic avatar providers (**LemonSlice, Tavus, Protoface, Anam**) directly with
 a **fixed WAV**, so each provider lip-syncs to the *same* audio, and record the
 published video. Useful for byte-identical, side-by-side provider comparisons.
